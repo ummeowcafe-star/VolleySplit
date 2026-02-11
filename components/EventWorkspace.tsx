@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { EventData, Session } from '../types';
 import { MatrixGrid } from './MatrixGrid';
 import { SummaryCard } from './SummaryCard';
-import { ArrowLeft, Trash2, Clock, UserPlus, X, Check, Plus } from 'lucide-react';
+// ★ 加入 ArrowUp 圖示
+import { ArrowLeft, Trash2, Clock, UserPlus, X, Check, ArrowUp } from 'lucide-react';
 
 interface Props {
   event: EventData;
   onUpdate: (event: EventData) => void;
   onBack: () => void;
   onDelete: () => void;
-  // ★ 新增：接收來自 App.tsx 的電話數據
   phoneBook: { [name: string]: string }; 
 }
 
@@ -55,13 +55,17 @@ const Modal = ({
   );
 };
 
-// ★ 這裡也同步接收 phoneBook
 export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDelete, phoneBook }) => {
   const [modalType, setModalType] = useState<'add-session' | 'add-player' | 'delete-session' | 'delete-player' | 'delete-event' | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [targetId, setTargetId] = useState<string | null>(null);
 
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+
+  // ★ 新增：捲動回頂部函數
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // --- 邏輯處理 ---
   const handleHostChange = (sessionId: string, hostId: string) => {
@@ -123,7 +127,7 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
   };
 
   return (
-    <div className="space-y-6 pb-24 animate-in fade-in slide-in-from-right-4 duration-300">
+    <div className="relative space-y-6 pb-32 animate-in fade-in slide-in-from-right-4 duration-300">
       {/* 1. Modals */}
       <Modal isOpen={modalType === 'add-session'} title="新增時段" onSubmit={handleSubmit} onClose={() => setModalType(null)} submitLabel="新增">
         <input autoFocus value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="例如: 18:00 - 20:00" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-600 font-bold" onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
@@ -171,8 +175,15 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
         onHostChange={handleHostChange} 
       />
       
-      {/* ★ 這裡：將 phoneBook 正式傳遞給 SummaryCard */}
       <SummaryCard event={event} phoneBook={phoneBook} />
+
+      {/* ★ 5. 長駐右下角的回頂部泡泡鍵 */}
+      <button
+        onClick={scrollToTop}
+        className="fixed bottom-8 right-6 z-[60] p-4 bg-blue-700 text-white rounded-full shadow-2xl transition-all hover:bg-blue-800 active:scale-90 ring-4 ring-white"
+      >
+        <ArrowUp size={24} />
+      </button>
     </div>
   );
 };

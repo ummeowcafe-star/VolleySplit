@@ -3,11 +3,10 @@ import { DollarSign, ArrowRight, CheckCircle2, User, Copy, Check } from 'lucide-
 
 interface SummaryCardProps {
   event: any;
-  phoneBook: { [name: string]: string }; // 接收來自 App.tsx 的電話數據
+  phoneBook: { [name: string]: string }; 
 }
 
 export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
-  // 安全防護：確保 phoneBook 不會是 undefined
   const safePhoneBook = phoneBook || {}; 
 
   const balances: { [playerId: string]: number } = {};
@@ -37,7 +36,7 @@ export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
     }
   });
 
-  // 2. 準備債務與債權清單並排序
+  // 2. 準備債務與債權清單
   const debtors: { id: string; amount: number }[] = [];
   const creditors: { id: string; amount: number }[] = [];
 
@@ -69,7 +68,6 @@ export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
 
   const getPlayerName = (id: string) => event.players.find((p: any) => p.id === id)?.name || "未知";
 
-  // 複製功能的狀態管理
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const handleCopy = (key: string, phone: string) => {
     if (!phone || phone === 'unknown') return;
@@ -90,7 +88,7 @@ export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
         </div>
       </div>
 
-      <div className="p-5 space-y-3">
+      <div className="p-4 space-y-3">
         {transactions.length === 0 ? (
           <div className="py-12 text-center space-y-2">
             <CheckCircle2 size={48} className="mx-auto text-emerald-400 opacity-20" />
@@ -103,52 +101,66 @@ export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
             const uniqueKey = `tx-${idx}`;
 
             return (
-              <div key={idx} className="bg-slate-50 border border-slate-100 rounded-3xl p-5 flex items-center justify-between group hover:border-blue-200 transition-all">
-                {/* 左側：人物資訊 */}
-                <div className="flex items-center gap-4">
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-black text-slate-400 uppercase mb-1">付款人</span>
-                    <span className="font-black text-blue-900 text-lg">{getPlayerName(tx.from)}</span>
-                  </div>
-                  <ArrowRight size={20} className="text-blue-200" />
-                  <div className="flex flex-col">
-                    <span className="text-[9px] font-black text-slate-400 uppercase mb-1">收款人</span>
-                    <span className="font-black text-blue-700 text-lg">{receiverName}</span>
-                  </div>
-                </div>
-
-                {/* ★ 中間區域：利用你圈出的空白空間顯示電話 */}
-                <div className="flex-1 flex items-center justify-center px-4">
-                  {receiverPhone && receiverPhone !== 'unknown' && (
-                    <div className="flex items-center gap-2 bg-white/80 px-3 py-1.5 rounded-2xl border border-blue-50 shadow-sm animate-in fade-in zoom-in duration-300">
-                      <span className="text-[10px] font-bold text-slate-400">Tel:</span>
-                      <span className="text-sm font-black text-blue-600 font-mono tracking-tighter">{receiverPhone}</span>
-                      <button 
-                        onClick={() => handleCopy(uniqueKey, receiverPhone)}
-                        className={`p-1.5 rounded-lg transition-all ${
-                          copiedKey === uniqueKey ? 'bg-emerald-500 text-white' : 'text-blue-400 hover:bg-blue-100'
-                        }`}
-                      >
-                        {copiedKey === uniqueKey ? <Check size={14} /> : <Copy size={14} />}
-                      </button>
+              <div key={idx} className="bg-slate-50 border border-slate-100 rounded-[1.5rem] p-4 flex flex-col gap-3 transition-all">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-slate-400 uppercase">From</span>
+                      <span className="font-black text-slate-700 text-sm">{getPlayerName(tx.from)}</span>
                     </div>
-                  )}
+                    <ArrowRight size={14} className="text-blue-200" />
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-blue-400 uppercase">To</span>
+                      <span className="font-black text-blue-900 text-sm">{receiverName}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xl font-black text-blue-900 tracking-tighter">${tx.amount.toFixed(1)}</span>
+                  </div>
                 </div>
 
-                {/* 右側：金額 */}
-                <div className="text-right flex flex-col items-end min-w-[80px]">
-                  <span className="text-[9px] font-black text-blue-400 uppercase mb-1">應轉金額</span>
-                  <span className="text-2xl font-black text-blue-900 leading-none">${tx.amount.toFixed(1)}</span>
-                </div>
+                {receiverPhone && receiverPhone !== 'unknown' && (
+                  <div className="flex items-center justify-between bg-white rounded-xl px-4 py-2 border border-blue-50 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">轉帳電話:</span>
+                      <span className="text-xs font-black text-blue-600 font-mono">{receiverPhone}</span>
+                    </div>
+                    <button 
+                      onClick={() => handleCopy(uniqueKey, receiverPhone)}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-black transition-all ${
+                        copiedKey === uniqueKey ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                      }`}
+                    >
+                      {copiedKey === uniqueKey ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedKey === uniqueKey ? '已複製' : '複製號碼'}
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })
         )}
       </div>
 
-      <div className="px-6 py-4 bg-slate-50 text-center border-t border-slate-100">
+      {/* ★ 重新加回：Host 收款彙整區塊 */}
+      {creditors.length > 0 && (
+        <div className="px-6 pb-6 pt-2 animate-in fade-in duration-500">
+          <div className="border-t border-slate-100 pt-4">
+            <h4 className="text-[10px] font-black text-slate-400 uppercase mb-3 px-1">本場收款人彙整 (代付墊付者)</h4>
+            <div className="flex flex-wrap gap-2">
+              {creditors.map(c => (
+                <div key={c.id} className="bg-blue-50 text-blue-700 px-4 py-2 rounded-2xl text-xs font-black flex items-center gap-2 border border-blue-100/50 shadow-sm">
+                  <User size={12} /> {getPlayerName(c.id)}: <span className="text-blue-900">${c.amount.toFixed(1)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="px-6 py-4 bg-slate-50 text-center border-t border-slate-50">
         <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-relaxed">
-          點擊複製號碼後即可貼上銀行 App 轉帳 · 已自動優化轉帳路徑
+          系統已自動優化轉帳路徑 · 減少轉帳次數
         </p>
       </div>
     </section>
