@@ -7,8 +7,9 @@ import { Ledger } from './components/Ledger';
 import { createClient } from '@supabase/supabase-js';
 
 // --- Supabase 配置 ---
-const SUPABASE_URL = 'https://你的項目URL.supabase.co';
-const SUPABASE_ANON_KEY = '你的AnonKey';
+// 使用 import.meta.env 來讀取，這樣 GitHub 上的代碼就不會洩漏你的私密金鑰
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 interface Session {
@@ -66,16 +67,26 @@ export default function App() {
   const USER_ID = 'Owen_User_001'; 
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
-  useEffect(() => {
-    const loadCloudData = async () => {
-      try {
-        const { data } = await supabase.from('volley_events').select('data').eq('user_id', USER_ID).single();
-        if (data) setStore(data.data);
-      } catch (e) { console.error('Cloud load failed:', e); }
-      finally { setIsLoaded(true); }
-    };
-    loadCloudData();
-  }, []);
+useEffect(() => {
+  const loadCloudData = async () => {
+    try {
+      // 修正：將 .single() 改為 .maybeSingle()
+      const { data, error } = await supabase
+        .from('volley_events')
+        .select('data')
+        .eq('user_id', USER_ID)
+        .maybeSingle(); 
+
+      if (data) setStore(data.data);
+      if (error) console.error('Supabase error:', error.message);
+    } catch (e) { 
+      console.error('Cloud load failed:', e); 
+    } finally { 
+      setIsLoaded(true); 
+    }
+  };
+  loadCloudData();
+}, []);
 
   useEffect(() => {
     if (isLoaded) {
