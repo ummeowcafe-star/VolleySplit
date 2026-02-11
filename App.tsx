@@ -7,7 +7,6 @@ import { Ledger } from './components/Ledger';
 import { createClient } from '@supabase/supabase-js';
 
 // --- Supabase 配置 ---
-// 使用 import.meta.env 來讀取，這樣 GitHub 上的代碼就不會洩漏你的私密金鑰
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -41,16 +40,14 @@ interface GlobalState {
 }
 
 export default function App() {
-  // 修改：將你提供的 23 位人員名單預設加入 playerNames
   const [store, setStore] = useState<GlobalState>({ 
     events: [],
     defaults: {
       cost: 200,
       playerNames: [
-        'Carol', 'Kei', 'Owen',  'Tao', 'Candice', 'Humberto', 'Abby', 'Elson', 'Miki', 
-        'Jacob', 'Vanessa', 'Eddie',  'Iman', 'Herman',  
-         'Fifi', 'Ka Ieng', 'Jimmy', 'Kit',  'Celia', 
-        'Winnie', 'Pang', 'On' , 'Ricky'
+        'Carol', 'Kei', 'Owen', 'Tao', 'Candice', 'Humberto', 'Abby', 'Elson', 'Miki', 
+        'Jacob', 'Vanessa', 'Eddie', 'Iman', 'Herman', 'Fifi', 'Ka Ieng', 'Jimmy', 
+        'Kit', 'Celia', 'Winnie', 'Pang', 'On' , 'Ricky'
       ],
       sessionNames: ['15:00 - 16:00', '16:00 - 17:00']
     },
@@ -67,33 +64,58 @@ export default function App() {
   const USER_ID = 'Owen_User_001'; 
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
-useEffect(() => {
-  const loadCloudData = async () => {
-    try {
-      // 修正：將 .single() 改為 .maybeSingle()
-      const { data, error } = await supabase
-        .from('volley_events')
-        .select('data')
-        .eq('user_id', USER_ID)
-        .maybeSingle(); 
-
-      if (data) setStore(data.data);
-      if (error) console.error('Supabase error:', error.message);
-    } catch (e) { 
-      console.error('Cloud load failed:', e); 
-    } finally { 
-      setIsLoaded(true); 
-    }
-  };
-  loadCloudData();
-}, []);
-
+  // 1. 從雲端抓取資料
   useEffect(() => {
-    if (isLoaded) {
-      supabase.from('volley_events').upsert({ user_id: USER_ID, data: store, updated_at: new Date() });
-    }
+    const loadCloudData = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('volley_events')
+          .select('data')
+          .eq('user_id', USER_ID)
+          .maybeSingle(); 
+
+        if (data) {
+          console.log('✅ 成功從雲端下載資料:', data.data);
+          setStore(data.data);
+        } else {
+          console.log('ℹ️ 雲端尚無資料，將使用預設名單。');
+        }
+        
+        if (error) console.error('❌ Supabase 讀取錯誤:', error.message);
+      } catch (e) { 
+        console.error('❌ 讀取過程發生崩潰:', e); 
+      } finally { 
+        setIsLoaded(true); 
+      }
+    };
+    loadCloudData();
+  }, []);
+
+  // 2. 當 store 改變時同步到雲端 (加入偵錯日誌)
+  useEffect(() => {
+    const saveData = async () => {
+      if (isLoaded) {
+        console.log('⏳ 正在嘗試同步到雲端...', store);
+        const { error } = await supabase
+          .from('volley_events')
+          .upsert(
+            { user_id: USER_ID, data: store, updated_at: new Date() },
+            { onConflict: 'user_id' }
+          );
+
+        if (error) {
+          console.error('❌ 雲端同步失敗！');
+          console.error('錯誤訊息:', error.message);
+          console.error('錯誤代碼:', error.code);
+        } else {
+          console.log('✅ 雲端同步成功！');
+        }
+      }
+    };
+    saveData();
   }, [store, isLoaded]);
 
+  // --- 以下為原有邏輯，保持不變 ---
   const handleTogglePaid = (eventId: string, playerName: string) => {
     const key = `${eventId}_${playerName}`;
     setStore(prev => ({
