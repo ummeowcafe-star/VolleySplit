@@ -38,6 +38,17 @@ export default function App() {
   const USER_ID = 'Owen_User_001'; 
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
+  // ★ 新增：切換付款狀態的邏輯
+  const handleTogglePaid = (playerName: string) => {
+    setStore(prev => ({
+      ...prev,
+      paidStatus: {
+        ...prev.paidStatus,
+        [playerName]: !prev.paidStatus[playerName] // 切換該球員的布林值
+      }
+    }));
+  };
+
   // 數據載入防護：確保電話簿始終存在
   useEffect(() => {
     const loadCloudData = async () => {
@@ -97,7 +108,6 @@ export default function App() {
             setStore(prev => ({ ...prev, events: prev.events.filter(e => e.id !== currentEventId) }));
             setCurrentEventId(null);
           }} 
-          // ★ 修改點：將電話簿數據傳遞給 EventWorkspace
           phoneBook={store.defaults.phoneBook} 
         />
       </div>
@@ -110,7 +120,7 @@ export default function App() {
         <div className="max-w-3xl mx-auto px-4 h-20 flex items-center justify-between">
           <button onClick={() => setActiveTab('events')} className="flex items-center gap-3">
             <img src="https://i.postimg.cc/447QbrCz/ilustracao-de-ball-volly-320979-35.avif" alt="Logo" className="w-12 h-12" />
-            <h1 className="font-black text-2xl tracking-tighter text-blue-900">排球計數易</h1>
+            <h1 className="font-black text-2xl tracking-tighter text-blue-900">排球計數易 VolleySplit</h1>
           </button>
           <button onClick={() => setActiveTab('settings')} className={`p-2 rounded-full transition-colors ${activeTab === 'settings' ? 'bg-blue-50 text-blue-700' : 'text-slate-500'}`}>
             <Settings size={28} />
@@ -121,7 +131,14 @@ export default function App() {
       <main className="max-w-3xl mx-auto p-4">
         {activeTab === 'events' && <EventList events={store.events} onSelectEvent={setCurrentEventId} onCreateEvent={handleCreateEvent} />}
 
-        {activeTab === 'summary' && <Ledger events={store.events} paidStatus={store.paidStatus} onTogglePaid={() => {}} />}
+        {/* ★ 修改點：傳遞真正的 handleTogglePaid */}
+        {activeTab === 'summary' && (
+          <Ledger 
+            events={store.events} 
+            paidStatus={store.paidStatus} 
+            onTogglePaid={handleTogglePaid} 
+          />
+        )}
 
         {/* HOST 聯絡簿管理 */}
         {activeTab === 'hosts' && (

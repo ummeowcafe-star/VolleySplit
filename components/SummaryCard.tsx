@@ -146,7 +146,7 @@ export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
       {creditors.length > 0 && (
         <div className="px-6 pb-6 pt-2 animate-in fade-in duration-500">
           <div className="border-t border-slate-100 pt-4">
-            <h4 className="text-[10px] font-black text-slate-400 uppercase mb-3 px-1">本場收款人彙整 (代付墊付者)</h4>
+            <h4 className="text-[10px] font-black text-slate-400 uppercase mb-3 px-1">本場收款人彙整</h4>
             <div className="flex flex-wrap gap-2">
               {creditors.map(c => (
                 <div key={c.id} className="bg-blue-50 text-blue-700 px-4 py-2 rounded-2xl text-xs font-black flex items-center gap-2 border border-blue-100/50 shadow-sm">
