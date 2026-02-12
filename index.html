@@ -3,9 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/avif" href="https://i.postimg.cc/447QbrCz/ilustracao-de-ball-volly-320979-35.avif">
+    
     <link rel="manifest" href="/manifest.json">
-    <link rel="apple-touch-icon" href="https://i.postimg.cc/447QbrCz/ilustracao-de-ball-volly-320979-35.avif">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="VolleySplit">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1d4ed8"> <link rel="apple-touch-icon" href="https://i.postimg.cc/447QbrCz/ilustracao-de-ball-volly-320979-35.avif">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
     <title>排球計數易 VolleySplit</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
@@ -20,11 +27,11 @@
 
       /* ★ 全螢幕導引圖層樣式 */
       #wechat-guide {
-        display: none; /* 預設隱藏 */
+        display: none; 
         position: fixed;
         top: 0; left: 0;
         width: 100%; height: 100%;
-        background-color: rgba(15, 23, 42, 0.95); /* 深藍色半透明 */
+        background-color: rgba(15, 23, 42, 0.95); 
         z-index: 10000;
         color: white;
         text-align: center;
@@ -79,7 +86,6 @@
       window.onload = function() {
         const isWechat = /MicroMessenger/i.test(navigator.userAgent);
         if (isWechat) {
-          // 不再彈窗，而是顯示精美的導引圖層
           document.getElementById('wechat-guide').style.display = 'block';
         }
       }

@@ -6,17 +6,18 @@
       "src": "https://i.postimg.cc/447QbrCz/ilustracao-de-ball-volly-320979-35.avif",
       "sizes": "192x192",
       "type": "image/avif",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "https://i.postimg.cc/447QbrCz/ilustracao-de-ball-volly-320979-35.avif",
+      "src": "你的PNG圖示網址_512x512.png",
       "sizes": "512x512",
-      "type": "image/avif",
-      "purpose": "any maskable"
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "./index.html",
   "display": "standalone",
-  "theme_color": "#0f172a",
+  "orientation": "portrait",
+  "theme_color": "#1d4ed8",
   "background_color": "#f8fafc"
 }
