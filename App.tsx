@@ -3,22 +3,18 @@ import { Settings, List, Receipt, User, Plus, Trash2, Save, Crown, Clock, UserPl
 import { EventWorkspace } from './components/EventWorkspace';
 import { EventList } from './components/EventList';
 import { Ledger } from './components/Ledger';
-import { createClient } from '@supabase/supabase-js';
-import { supabase } from './supabaseClient';
+import { ContactManager } from './components/ContactManager'; // ★ 確保你有這個元件
+import { supabase } from './supabaseClient'; // ★ 唯一連線來源
 
 // 引入外部數據檔
 import { PLAYER_PHONE_BOOK } from './data/playerData';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+// 型別定義
 interface Session { id: string; name: string; cost: number; hostId?: string; }
-interface EventData { id: string; date: string; eventName: string; defaultCost: number; players: any[]; sessions: Session[]; participation?: { [key: string]: number }; }
+interface Player { id: string; name: string; }
+interface EventData { id: string; date: string; eventName: string; defaultCost: number; players: Player[]; sessions: Session[]; participation?: { [key: string]: number }; }
 interface GlobalDefaults { cost: number; playerNames: string[]; sessionNames: string[]; phoneBook: { [name: string]: string }; }
 interface GlobalState { events: EventData[]; defaults: GlobalDefaults; paidStatus: { [key: string]: boolean }; }
-
-// ★ 新增：雲端聯絡人型別
 interface Contact { id: string; name: string; phone: string; }
 
 export default function App() {
@@ -39,63 +35,37 @@ export default function App() {
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newSessionName, setNewSessionName] = useState('');
 
-  // ★ 新增：雲端聯絡簿狀態
+  // 雲端聯絡簿狀態
   const [cloudContacts, setCloudContacts] = useState<Contact[]>([]);
-  const [newContactName, setNewContactName] = useState('');
-  const [newContactPhone, setNewContactPhone] = useState('');
-
   const USER_ID = 'Owen_User_001'; 
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
-  // ★ 新增：抓取雲端聯絡人
+  // 抓取雲端聯絡人
   const fetchCloudContacts = async () => {
     const { data, error } = await supabase
       .from('contacts')
       .select('*')
       .order('created_at', { ascending: false });
     
-    if (!error && data) {
-      setCloudContacts(data);
-    }
+    if (!error && data) setCloudContacts(data);
   };
 
-  // ★ 新增：儲存新聯絡人到雲端
-  const handleAddCloudContact = async () => {
-    if (!newContactName.trim()) return;
-    
-    const { error } = await supabase
-      .from('contacts')
-      .insert([{ 
-        name: newContactName.trim(), 
-        phone: newContactPhone.trim(),
-        user_id: USER_ID // 配合 RLS 政策
-      }]);
-
-    if (!error) {
-      setNewContactName('');
-      setNewContactPhone('');
-      fetchCloudContacts(); // 刷新列表
-    }
-  };
-
-  // 數據載入防護
+  // 初始載入與數據同步
   useEffect(() => {
     const loadCloudData = async () => {
       try {
-        const { data, error } = await supabase.from('volley_events').select('data').eq('user_id', USER_ID).maybeSingle(); 
+        const { data } = await supabase.from('volley_events').select('data').eq('user_id', USER_ID).maybeSingle(); 
         if (data) {
           let cloudData = data.data;
           if (!cloudData.defaults.phoneBook) cloudData.defaults.phoneBook = PLAYER_PHONE_BOOK;
           setStore(cloudData);
         }
-        // ★ 載入時同步抓取雲端聯絡簿
         await fetchCloudContacts();
       } catch (e) { console.error('SYNC ERROR:', e); } finally { setIsLoaded(true); }
     };
     loadCloudData();
   }, []);
 
-  // 數據同步到 Supabase
   useEffect(() => {
     const saveData = async () => {
       if (isLoaded) {
@@ -141,7 +111,6 @@ export default function App() {
             setStore(prev => ({ ...prev, events: prev.events.filter(e => e.id !== currentEventId) }));
             setCurrentEventId(null);
           }} 
-          // ★ 修改：同時傳入靜態與雲端名單
           phoneBook={store.defaults.phoneBook} 
           cloudContacts={cloudContacts} 
         />
@@ -167,65 +136,32 @@ export default function App() {
         {activeTab === 'events' && <EventList events={store.events} onSelectEvent={setCurrentEventId} onCreateEvent={handleCreateEvent} />}
 
         {activeTab === 'summary' && (
-          <Ledger 
-            events={store.events} 
-            paidStatus={store.paidStatus} 
-            onTogglePaid={handleTogglePaid} 
-          />
+          <Ledger events={store.events} paidStatus={store.paidStatus} onTogglePaid={handleTogglePaid} />
         )}
 
-        {/* ★ 重大修改：雲端 Host 聯絡簿管理 */}
+        {/* 使用獨立的 ContactManager 元件管理雲端名單 */}
         {activeTab === 'hosts' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            {/* 新增聯絡人區塊 */}
-            <section className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
-              <h3 className="font-black text-blue-900 mb-4 flex items-center gap-2 uppercase text-xs tracking-widest">
-                <UserPlus size={16} /> 新增雲端聯絡人
-              </h3>
-              <div className="flex flex-col gap-3">
-                <input placeholder="姓名 (例如: Angela)" value={newContactName} onChange={e => setNewContactName(e.target.value)} className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" />
-                <input placeholder="電話 (例如: 66881234)" value={newContactPhone} onChange={e => setNewContactPhone(e.target.value)} className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" />
-                <button onClick={handleAddCloudContact} className="bg-blue-700 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all">
-                  <Save size={18} /> 存入雲端數據庫
-                </button>
-              </div>
-            </section>
-
-            {/* 列表顯示區塊 */}
-            <section className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm">
-              <div className="p-4 border-b border-slate-100 bg-blue-50/30 flex items-center gap-2">
-                <Crown className="text-yellow-500" size={16} />
-                <h3 className="font-black text-blue-900 text-[10px] uppercase">雲端聯絡人清單</h3>
-              </div>
-              <div className="p-2 space-y-1">
-                {cloudContacts.map((contact) => (
-                  <div key={contact.id} className="flex items-center justify-between p-4 hover:bg-blue-50/30 rounded-2xl transition-colors group">
-                    <div>
-                      <span className="font-black text-slate-700 block">{contact.name}</span>
-                      <span className="text-[10px] text-slate-400 font-bold">{contact.phone || '無電話'}</span>
-                    </div>
-                    <button 
-                      onClick={async () => {
-                        if(confirm(`確定刪除 ${contact.name}?`)) {
-                          await supabase.from('contacts').delete().eq('id', contact.id);
-                          fetchCloudContacts();
-                        }
-                      }}
-                      className="text-red-200 hover:text-red-500 p-2"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
+          <ContactManager 
+            contacts={cloudContacts} 
+            onRefresh={fetchCloudContacts} 
+            userId={USER_ID} 
+          />
         )}
 
         {/* SETTINGS 頁面 */}
         {activeTab === 'settings' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            {/* ... 原本的 Global Roster, Sessions, Cost 設定保持不變 ... */}
+             {/* 這裡保留你原本的 Roster, Sessions, Cost 設定代碼 */}
+             <section className="bg-white rounded-[2rem] border border-slate-200 p-5 shadow-sm">
+                <span className="font-black text-slate-700 text-sm block">預設場租費用</span>
+                <input 
+                  type="number" 
+                  value={store.defaults.cost} 
+                  onChange={(e) => setStore(prev => ({ ...prev, defaults: { ...prev.defaults, cost: Number(e.target.value) } }))}
+                  className="w-full bg-slate-50 mt-2 p-3 rounded-xl font-black text-blue-900 outline-none"
+                />
+             </section>
+             <button onClick={() => setActiveTab('events')} className="w-full bg-blue-700 text-white font-black py-5 rounded-[1.5rem] shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"><Save size={24} /> 保存並返回</button>
           </div>
         )}
       </main>

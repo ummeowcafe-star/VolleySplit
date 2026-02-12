@@ -180,7 +180,11 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
         onHostChange={handleHostChange} 
       />
       
-      <SummaryCard event={event} phoneBook={phoneBook} />
+      <SummaryCard 
+        event={event} 
+        phoneBook={phoneBook} 
+        cloudContacts={cloudContacts} 
+      />
 
       {/* ★ 5. 回頂部按鈕 */}
       <button
