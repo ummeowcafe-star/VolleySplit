@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { DollarSign, ArrowRight, CheckCircle2, User, Copy, Check } from 'lucide-react';
 
-// ★ 更新介面定義：加入 cloudContacts
+// 定義 Props 介面
 interface SummaryCardProps {
   event: any;
   phoneBook: { [name: string]: string }; 
@@ -12,33 +12,26 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
   const safePhoneBook = phoneBook || {}; 
   const safeCloudContacts = cloudContacts || [];
 
-  // ★ 核心修正 1：改良名稱搜尋邏輯
+  // 名稱搜尋邏輯
   const getPlayerName = (id: string) => {
     const player = event.players.find((p: any) => p.id === id);
     if (player) return player.name;
     return id || "未知"; 
   };
 
-  // ★ 核心修正 2：整合搜尋器，並統一「未知」字串的判斷
+  // 整合搜尋器：排除 null、空值及 "unknown" 字串
   const findPhone = (name: string) => {
     let phone = null;
-    
-    // 1. 先從靜態通訊錄找
     if (safePhoneBook[name]) {
       phone = safePhoneBook[name];
-    } 
-    // 2. 再從雲端名單找
-    else {
+    } else {
       const cloudMatch = safeCloudContacts.find(c => c.name === name);
       if (cloudMatch) phone = cloudMatch.phone;
     }
 
-    // ★ 關鍵修正：過濾字串 "unknown"、空字串或 null
-    // 這樣可以消除 image_17e6e5.png 中出現藍色 unknown 的錯誤情況
     if (!phone || phone.toLowerCase() === 'unknown' || phone.trim() === '') {
       return null;
     }
-    
     return phone;
   };
 
@@ -159,7 +152,6 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
                     )}
                   </div>
 
-                  {/* ★ 只有真正的號碼才會顯示複製按鈕 */}
                   {receiverPhone && (
                     <button 
                       onClick={() => handleCopy(uniqueKey, receiverPhone)}
@@ -178,7 +170,6 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
         )}
       </div>
 
-      {/* 收款彙整區塊 */}
       {creditors.length > 0 && (
         <div className="px-6 pb-6 pt-2 animate-in fade-in duration-500">
           <div className="border-t border-slate-100 pt-4">
