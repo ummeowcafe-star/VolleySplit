@@ -9,7 +9,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="VolleySplit">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#1d4ed8"> <link rel="apple-touch-icon" href="https://i.postimg.cc/447QbrCz/ilustracao-de-ball-volly-320979-35.avif">
+    <meta name="theme-color" content="#1d4ed8"> 
+    <link rel="apple-touch-icon" href="https://i.postimg.cc/447QbrCz/ilustracao-de-ball-volly-320979-35.avif">
     
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     
@@ -49,6 +50,34 @@
         0%, 100% { transform: translateY(0) translateX(0); }
         50% { transform: translateY(-10px) translateX(10px); }
       }
+
+      /* ★ 啟動畫面 (Splash Screen) 樣式 */
+      #splash-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background-color: #f8fafc;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: opacity 0.5s ease-out, visibility 0.5s;
+      }
+      #splash-screen img {
+        width: 120px;
+        height: auto;
+        border-radius: 28px;
+        box-shadow: 0 20px 40px -15px rgba(29, 78, 216, 0.3);
+        animation: splash-pulse 2s infinite ease-in-out;
+      }
+      #splash-screen.splash-hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      @keyframes splash-pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.08); opacity: 0.8; }
+      }
     </style>
 
     <script type="importmap">
@@ -63,6 +92,10 @@
     </script>
   </head>
   <body>
+    <div id="splash-screen">
+      <img src="https://i.postimg.cc/447QbrCz/ilustracao-de-ball-volly-320979-35.avif" alt="Loading Logo" />
+    </div>
+
     <div id="wechat-guide">
       <div class="guide-arrow">↗</div>
       <div class="px-10">

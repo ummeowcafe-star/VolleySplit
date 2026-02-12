@@ -3,8 +3,8 @@ import { Settings, List, Receipt, User, Plus, Trash2, Save, Crown, Clock, UserPl
 import { EventWorkspace } from './components/EventWorkspace';
 import { EventList } from './components/EventList';
 import { Ledger } from './components/Ledger';
-import { ContactManager } from './components/ContactManager'; // ★ 確保你有這個元件
-import { supabase } from './supabaseClient'; // ★ 唯一連線來源
+import { ContactManager } from './components/ContactManager'; 
+import { supabase } from './supabaseClient'; 
 
 // 引入外部數據檔
 import { PLAYER_PHONE_BOOK } from './data/playerData';
@@ -32,9 +32,7 @@ export default function App() {
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'events' | 'summary' | 'hosts' | 'settings'>('events');
   const [isLoaded, setIsLoaded] = useState(false);
-  const [newPlayerName, setNewPlayerName] = useState('');
-  const [newSessionName, setNewSessionName] = useState('');
-
+  
   // 雲端聯絡簿狀態
   const [cloudContacts, setCloudContacts] = useState<Contact[]>([]);
   const USER_ID = 'Owen_User_001'; 
@@ -50,6 +48,22 @@ export default function App() {
     if (!error && data) setCloudContacts(data);
   };
 
+  // --- ★ 啟動畫面移除邏輯 ---
+  useEffect(() => {
+    if (isLoaded) {
+      const splash = document.getElementById('splash-screen');
+      if (splash) {
+        // 給予 500ms 緩衝，讓使用者看清楚 Logo 後再優雅淡出
+        const timer = setTimeout(() => {
+          splash.classList.add('splash-hidden');
+          // 動畫結束後徹底從 DOM 移除，釋放資源
+          setTimeout(() => splash.remove(), 500);
+        }, 500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isLoaded]);
+
   // 初始載入與數據同步
   useEffect(() => {
     const loadCloudData = async () => {
@@ -61,7 +75,12 @@ export default function App() {
           setStore(cloudData);
         }
         await fetchCloudContacts();
-      } catch (e) { console.error('SYNC ERROR:', e); } finally { setIsLoaded(true); }
+      } catch (e) { 
+        console.error('SYNC ERROR:', e); 
+      } finally { 
+        // 同步完成，這會觸發上面的 Splash Screen 移除邏輯
+        setIsLoaded(true); 
+      }
     };
     loadCloudData();
   }, []);
@@ -95,7 +114,8 @@ export default function App() {
     setCurrentEventId(newId);
   };
 
-  if (!isLoaded) return <div className="min-h-screen flex items-center justify-center font-black text-blue-600">SYNCING...</div>;
+  // 如果還沒載入完成，我們回傳 null，讓 index.html 裡的 Splash Screen 繼續顯示
+  if (!isLoaded) return null;
 
   // --- 活動工作區渲染 ---
   if (currentEventId) {
@@ -139,7 +159,6 @@ export default function App() {
           <Ledger events={store.events} paidStatus={store.paidStatus} onTogglePaid={handleTogglePaid} />
         )}
 
-        {/* 使用獨立的 ContactManager 元件管理雲端名單 */}
         {activeTab === 'hosts' && (
           <ContactManager 
             contacts={cloudContacts} 
@@ -148,10 +167,8 @@ export default function App() {
           />
         )}
 
-        {/* SETTINGS 頁面 */}
         {activeTab === 'settings' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-             {/* 這裡保留你原本的 Roster, Sessions, Cost 設定代碼 */}
              <section className="bg-white rounded-[2rem] border border-slate-200 p-5 shadow-sm">
                 <span className="font-black text-slate-700 text-sm block">預設場租費用</span>
                 <input 
