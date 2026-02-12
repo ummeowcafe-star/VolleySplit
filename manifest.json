@@ -1,0 +1,22 @@
+{
+  "short_name": "VolleySplit",
+  "name": "排球計數易 VolleySplit",
+  "icons": [
+    {
+      "src": "https://i.postimg.cc/447QbrCz/ilustracao-de-ball-volly-320979-35.avif",
+      "sizes": "192x192",
+      "type": "image/avif",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://i.postimg.cc/447QbrCz/ilustracao-de-ball-volly-320979-35.avif",
+      "sizes": "512x512",
+      "type": "image/avif",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0f172a",
+  "background_color": "#f8fafc"
+}
