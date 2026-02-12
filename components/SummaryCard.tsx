@@ -1,21 +1,48 @@
 import React, { useState } from 'react';
 import { DollarSign, ArrowRight, CheckCircle2, User, Copy, Check } from 'lucide-react';
 
+// ★ 更新介面定義：加入 cloudContacts
 interface SummaryCardProps {
   event: any;
   phoneBook: { [name: string]: string }; 
+  cloudContacts: { id: string; name: string; phone: string }[]; 
 }
 
-export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
+export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProps) {
   const safePhoneBook = phoneBook || {}; 
+  const safeCloudContacts = cloudContacts || [];
+
+  // ★ 核心修正 1：改良名稱搜尋邏輯
+  // 如果在球員名單找不到 (非玩家代付)，則直接回傳 ID 本身 (通常就是名字)
+  const getPlayerName = (id: string) => {
+    const player = event.players.find((p: any) => p.id === id);
+    if (player) return player.name;
+    return id || "未知"; 
+  };
+
+  // ★ 核心修正 2：建立整合電話搜尋器
+  const findPhone = (name: string) => {
+    // 1. 先從靜態通訊錄找
+    if (safePhoneBook[name]) return safePhoneBook[name];
+    // 2. 再從雲端名單找
+    const cloudMatch = safeCloudContacts.find(c => c.name === name);
+    if (cloudMatch) return cloudMatch.phone;
+    return null;
+  };
 
   const balances: { [playerId: string]: number } = {};
+  
+  // 初始化所有人的餘額
   event.players.forEach((p: any) => { balances[p.id] = 0; });
 
   // 1. 計算淨額 (代付 - 消費)
   event.sessions.forEach((session: any) => {
     if (session.hostId) {
-      balances[session.hostId] = (balances[session.hostId] || 0) + session.cost;
+      // 如果 hostId 不在 balances 裡 (代表是非玩家代付)，幫他建立一個臨時帳戶
+      if (balances[session.hostId] === undefined) {
+        balances[session.hostId] = 0;
+      }
+      balances[session.hostId] += session.cost;
     }
   });
 
@@ -66,11 +93,9 @@ export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
     if (c.amount < 0.1) cIdx++;
   }
 
-  const getPlayerName = (id: string) => event.players.find((p: any) => p.id === id)?.name || "未知";
-
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const handleCopy = (key: string, phone: string) => {
-    if (!phone || phone === 'unknown') return;
+    if (!phone) return;
     navigator.clipboard.writeText(phone);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
@@ -97,7 +122,8 @@ export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
         ) : (
           transactions.map((tx, idx) => {
             const receiverName = getPlayerName(tx.to);
-            const receiverPhone = safePhoneBook?.[receiverName]; 
+            // ★ 修改：使用新建立的搜尋器找電話
+            const receiverPhone = findPhone(receiverName); 
             const uniqueKey = `tx-${idx}`;
 
             return (
@@ -119,7 +145,7 @@ export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
                   </div>
                 </div>
 
-                {receiverPhone && receiverPhone !== 'unknown' && (
+                {receiverPhone && (
                   <div className="flex items-center justify-between bg-white rounded-xl px-4 py-2 border border-blue-50 shadow-sm">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">轉帳電話:</span>
@@ -128,7 +154,7 @@ export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
                     <button 
                       onClick={() => handleCopy(uniqueKey, receiverPhone)}
                       className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-black transition-all ${
-                        copiedKey === uniqueKey ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                        copiedKey === uniqueKey ? 'bg-emerald-500 text-white' : 'bg-blue-100 text-blue-700'
                       }`}
                     >
                       {copiedKey === uniqueKey ? <Check size={12} /> : <Copy size={12} />}
@@ -142,7 +168,7 @@ export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
         )}
       </div>
 
-      {/* ★ 重新加回：Host 收款彙整區塊 */}
+      {/* 收款彙整區塊 */}
       {creditors.length > 0 && (
         <div className="px-6 pb-6 pt-2 animate-in fade-in duration-500">
           <div className="border-t border-slate-100 pt-4">
@@ -157,12 +183,6 @@ export function SummaryCard({ event, phoneBook }: SummaryCardProps) {
           </div>
         </div>
       )}
-
-      <div className="px-6 py-4 bg-slate-50 text-center border-t border-slate-50">
-        <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-relaxed">
-          系統已自動優化轉帳路徑 · 減少轉帳次數
-        </p>
-      </div>
     </section>
   );
 }
