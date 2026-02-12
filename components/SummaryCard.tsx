@@ -13,35 +13,42 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
   const safeCloudContacts = cloudContacts || [];
 
   // ★ 核心修正 1：改良名稱搜尋邏輯
-  // 如果在球員名單找不到 (非玩家代付)，則直接回傳 ID 本身 (通常就是名字)
   const getPlayerName = (id: string) => {
     const player = event.players.find((p: any) => p.id === id);
     if (player) return player.name;
     return id || "未知"; 
   };
 
-  // ★ 核心修正 2：建立整合電話搜尋器
+  // ★ 核心修正 2：整合搜尋器，並統一「未知」字串的判斷
   const findPhone = (name: string) => {
+    let phone = null;
+    
     // 1. 先從靜態通訊錄找
-    if (safePhoneBook[name]) return safePhoneBook[name];
+    if (safePhoneBook[name]) {
+      phone = safePhoneBook[name];
+    } 
     // 2. 再從雲端名單找
-    const cloudMatch = safeCloudContacts.find(c => c.name === name);
-    if (cloudMatch) return cloudMatch.phone;
-    return null;
+    else {
+      const cloudMatch = safeCloudContacts.find(c => c.name === name);
+      if (cloudMatch) phone = cloudMatch.phone;
+    }
+
+    // ★ 關鍵修正：過濾字串 "unknown"、空字串或 null
+    // 這樣可以消除 image_17e6e5.png 中出現藍色 unknown 的錯誤情況
+    if (!phone || phone.toLowerCase() === 'unknown' || phone.trim() === '') {
+      return null;
+    }
+    
+    return phone;
   };
 
   const balances: { [playerId: string]: number } = {};
-  
-  // 初始化所有人的餘額
   event.players.forEach((p: any) => { balances[p.id] = 0; });
 
   // 1. 計算淨額 (代付 - 消費)
   event.sessions.forEach((session: any) => {
     if (session.hostId) {
-      // 如果 hostId 不在 balances 裡 (代表是非玩家代付)，幫他建立一個臨時帳戶
-      if (balances[session.hostId] === undefined) {
-        balances[session.hostId] = 0;
-      }
+      if (balances[session.hostId] === undefined) balances[session.hostId] = 0;
       balances[session.hostId] += session.cost;
     }
   });
@@ -84,11 +91,9 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
   while (dIdx < tempDebtors.length && cIdx < tempCreditors.length) {
     const d = tempDebtors[dIdx], c = tempCreditors[cIdx];
     const settleAmount = Math.min(d.amount, c.amount);
-
     transactions.push({ from: d.id, to: c.id, amount: settleAmount });
     d.amount -= settleAmount;
     c.amount -= settleAmount;
-
     if (d.amount < 0.1) dIdx++;
     if (c.amount < 0.1) cIdx++;
   }
@@ -122,7 +127,6 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
         ) : (
           transactions.map((tx, idx) => {
             const receiverName = getPlayerName(tx.to);
-            // ★ 修改：使用新建立的搜尋器找電話
             const receiverPhone = findPhone(receiverName); 
             const uniqueKey = `tx-${idx}`;
 
@@ -145,23 +149,29 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
                   </div>
                 </div>
 
-                {receiverPhone && (
-                  <div className="flex items-center justify-between bg-white rounded-xl px-4 py-2 border border-blue-50 shadow-sm">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">轉帳電話:</span>
+                <div className="flex items-center justify-between bg-white rounded-xl px-4 py-2 border border-blue-50 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">轉帳電話:</span>
+                    {receiverPhone ? (
                       <span className="text-xs font-black text-blue-600 font-mono">{receiverPhone}</span>
-                    </div>
+                    ) : (
+                      <span className="text-xs font-black text-red-400">Unknown</span>
+                    )}
+                  </div>
+
+                  {/* ★ 只有真正的號碼才會顯示複製按鈕 */}
+                  {receiverPhone && (
                     <button 
                       onClick={() => handleCopy(uniqueKey, receiverPhone)}
                       className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-black transition-all ${
-                        copiedKey === uniqueKey ? 'bg-emerald-500 text-white' : 'bg-blue-100 text-blue-700'
+                        copiedKey === uniqueKey ? 'bg-emerald-500 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                       }`}
                     >
                       {copiedKey === uniqueKey ? <Check size={12} /> : <Copy size={12} />}
                       {copiedKey === uniqueKey ? '已複製' : '複製號碼'}
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             );
           })
