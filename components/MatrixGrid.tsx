@@ -1,18 +1,27 @@
 import React from 'react';
 import { EventData } from '../types';
 import { Trash2, X, Crown } from 'lucide-react';
-// ★ 新增：引入完整的通訊錄名單
+// ★ 引入靜態通訊錄作為備用
 import { PLAYER_PHONE_BOOK } from '../data/playerData';
 
 interface Props {
   event: EventData;
+  // ★ 新增：接收雲端聯絡人屬性
+  cloudContacts: { id: string; name: string; phone: string }[];
   onWeightChange: (sessionId: string, playerId: string, weight: number) => void;
   onRemoveSession: (sessionId: string) => void;
   onRemovePlayer: (playerId: string) => void;
   onHostChange: (sessionId: string, hostId: string) => void;
 }
 
-export const MatrixGrid: React.FC<Props> = ({ event, onWeightChange, onRemoveSession, onRemovePlayer, onHostChange }) => {
+export const MatrixGrid: React.FC<Props> = ({ 
+  event, 
+  cloudContacts, // ★ 解構出雲端名單
+  onWeightChange, 
+  onRemoveSession, 
+  onRemovePlayer, 
+  onHostChange 
+}) => {
   
   const getWeight = (sessionId: string, playerId: string) => {
     const key = `${sessionId}_${playerId}`;
@@ -79,21 +88,30 @@ export const MatrixGrid: React.FC<Props> = ({ event, onWeightChange, onRemoveSes
                         <Crown size={10} className={session.hostId ? "text-yellow-500" : "text-blue-200"} />
                         <span className="text-[9px] text-blue-400 uppercase">Paid By</span>
                       </div>
-                      {/* ★ 改良：分組顯示代付人選擇器 */}
+                      
                       <select 
                         value={session.hostId || ''}
                         onChange={(e) => onHostChange(session.id, e.target.value)}
                         className={`w-full text-[10px] bg-white border ${!session.hostId ? 'border-red-200 animate-pulse' : 'border-blue-100'} rounded-lg py-1 px-1 outline-none focus:ring-1 focus:ring-blue-400 font-bold text-blue-700 cursor-pointer`}
                       >
                         <option value="">選擇代付人</option>
+                        
                         {/* 分組 1：今日玩家 */}
                         <optgroup label="今日玩家">
                           {event.players.map(p => (
                             <option key={p.id} value={p.id}>{p.name}</option>
                           ))}
                         </optgroup>
-                        {/* 分組 2：其他聯絡人（從通訊錄抓取，過濾已在玩家名單者） */}
-                        <optgroup label="其他聯絡人 (非玩家)">
+
+                        {/* ★ 分組 2：雲端聯絡簿 (Angela 就會出現在這！) */}
+                        <optgroup label="雲端聯絡簿 (可隨時新增)">
+                          {cloudContacts.map(c => (
+                            <option key={c.id} value={c.name}>{c.name}</option>
+                          ))}
+                        </optgroup>
+
+                        {/* 分組 3：系統靜態名單 (備用) */}
+                        <optgroup label="系統預設名單">
                           {Object.keys(PLAYER_PHONE_BOOK)
                             .filter(name => !event.players.some(p => p.name === name))
                             .map(name => (
@@ -116,6 +134,7 @@ export const MatrixGrid: React.FC<Props> = ({ event, onWeightChange, onRemoveSes
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
+            {/* ... 身體部分點名邏輯保持不變 ... */}
             {event.players.map(player => (
               <tr key={player.id} className="hover:bg-blue-50/20 transition-colors">
                 <td className="px-5 py-4 font-black text-slate-700 sticky left-0 bg-white z-10 border-r border-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">

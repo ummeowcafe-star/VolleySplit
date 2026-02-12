@@ -11,6 +11,8 @@ interface Props {
   onBack: () => void;
   onDelete: () => void;
   phoneBook: { [name: string]: string }; 
+  // ★ 新增：接收雲端聯絡人名單
+  cloudContacts: { id: string; name: string; phone: string }[];
 }
 
 // --- 內部元件：自定義彈窗 (Modal) ---
@@ -55,14 +57,15 @@ const Modal = ({
   );
 };
 
-export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDelete, phoneBook }) => {
+// ★ 修改：在解構中加入 cloudContacts
+export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDelete, phoneBook, cloudContacts }) => {
   const [modalType, setModalType] = useState<'add-session' | 'add-player' | 'delete-session' | 'delete-player' | 'delete-event' | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [targetId, setTargetId] = useState<string | null>(null);
 
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
-  // ★ 新增：捲動回頂部函數
+  // ★ 捲動回頂部函數
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -169,6 +172,8 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
       {/* 4. Matrix & Summary */}
       <MatrixGrid 
         event={event} 
+        // ★ 關鍵：將 cloudContacts 傳下去給 MatrixGrid
+        cloudContacts={cloudContacts} 
         onWeightChange={handleWeightChange}
         onRemoveSession={id => { setTargetId(id); setModalType('delete-session'); }}
         onRemovePlayer={id => { setTargetId(id); setModalType('delete-player'); }}
@@ -177,7 +182,7 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
       
       <SummaryCard event={event} phoneBook={phoneBook} />
 
-      {/* ★ 5. 長駐右下角的回頂部泡泡鍵 */}
+      {/* ★ 5. 回頂部按鈕 */}
       <button
         onClick={scrollToTop}
         className="fixed bottom-8 right-6 z-[60] p-4 bg-blue-700 text-white rounded-full shadow-2xl transition-all hover:bg-blue-800 active:scale-90 ring-4 ring-white"
