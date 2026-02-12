@@ -61,11 +61,11 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
       {/* 新增區塊 */}
       <section className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
         <h3 className="font-black text-blue-900 mb-4 flex items-center gap-2 uppercase text-xs tracking-widest">
-          <UserPlus size={16} /> 新增雲端聯絡人
+          <UserPlus size={16} /> 新增Host
         </h3>
         <div className="flex flex-col gap-3">
           <input 
-            placeholder="姓名 (例如: Angela)" 
+            placeholder="姓名 (例如: Carol)" 
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
@@ -82,7 +82,7 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
             className="bg-blue-700 text-white font-black py-4 rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-            {isSubmitting ? '儲存中...' : '存入雲端數據庫'}
+            {isSubmitting ? '儲存中...' : '存入數據庫'}
           </button>
         </div>
       </section>
@@ -90,7 +90,7 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
       {/* 列表區塊 */}
       <section className="bg-white rounded-[2rem] border border-slate-200 overflow-hidden shadow-sm">
         <div className="p-4 border-b border-slate-100 bg-blue-50/30">
-          <h3 className="font-black text-blue-900 text-[10px] uppercase">雲端聯絡人清單</h3>
+          <h3 className="font-black text-blue-900 text-[10px] uppercase">HOST清單</h3>
         </div>
         <div className="divide-y divide-slate-50">
           {contacts.map((contact) => (

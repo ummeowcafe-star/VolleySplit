@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, XCircle, TrendingUp, Users, Search } from 'lucide-react';
+import { CheckCircle2, TrendingUp, Users, Search } from 'lucide-react';
 
 interface LedgerProps {
   events: any[];
@@ -10,25 +10,23 @@ interface LedgerProps {
 export function Ledger({ events, paidStatus, onTogglePaid }: LedgerProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
-  // --- 核心邏輯：彙整所有場次的收支 ---
+  // --- 核心邏輯修正：改為全局收支統計 ---
   const playerBalances: { [name: string]: number } = {};
 
   events.forEach(event => {
-    const eventBalances: { [name: string]: number } = {};
-    
-    // 初始化該場球員
-    event.players.forEach((p: any) => { eventBalances[p.name] = 0; });
+    // 建立一個 ID 到 Name 的映射表，方便快速查找
+    const idToName: { [id: string]: string } = {};
+    event.players.forEach((p: any) => { idToName[p.id] = p.name; });
 
-    // 1. 計算該場 Host 拿回的錢 (代付)
     event.sessions.forEach((session: any) => {
-      const hostName = event.players.find((p: any) => p.id === session.hostId)?.name;
-      if (hostName) {
-        eventBalances[hostName] += session.cost;
+      // 1. 處理代付 (Credits)
+      if (session.hostId) {
+        // 如果在球員名單找不到 ID，代表 hostId 本身就是雲端聯絡人的名字 (例如 Carol)
+        const hostName = idToName[session.hostId] || session.hostId;
+        playerBalances[hostName] = (playerBalances[hostName] || 0) + session.cost;
       }
-    });
 
-    // 2. 扣除該場球員的消費 (支出)
-    event.sessions.forEach((session: any) => {
+      // 2. 處理支出 (Debits)
       const participants = event.players.filter((p: any) => 
         (event.participation?.[`${session.id}_${p.id}`] || 0) > 0
       );
@@ -40,14 +38,10 @@ export function Ledger({ events, paidStatus, onTogglePaid }: LedgerProps) {
         const unitCost = session.cost / totalWeight;
         participants.forEach((p: any) => {
           const weight = event.participation?.[`${session.id}_${p.id}`] || 0;
-          eventBalances[p.name] -= unitCost * weight;
+          const playerName = p.name;
+          playerBalances[playerName] = (playerBalances[playerName] || 0) - (unitCost * weight);
         });
       }
-    });
-
-    // 3. 將該場結果累加到全局總表
-    Object.entries(eventBalances).forEach(([name, balance]) => {
-      playerBalances[name] = (playerBalances[name] || 0) + balance;
     });
   });
 
@@ -60,10 +54,17 @@ export function Ledger({ events, paidStatus, onTogglePaid }: LedgerProps) {
     }))
     .filter(p => Math.abs(p.amount) > 0.1) // 只顯示有帳務紀錄的人
     .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    .sort((a, b) => (a.isPaid === b.isPaid ? 0 : a.isPaid ? 1 : -1));
+    // 排序邏輯：未付清的排前面，債權人(正數)排最前
+    .sort((a, b) => {
+      if (a.isPaid !== b.isPaid) return a.isPaid ? 1 : -1;
+      return b.amount - a.amount;
+    });
 
   // 防止 NaN 的計算
-  const totalUnpaid = allPlayers.filter(p => !p.isPaid && p.amount < 0).reduce((sum, p) => sum + Math.abs(p.amount), 0);
+  const totalUnpaid = allPlayers
+    .filter(p => !p.isPaid && p.amount < 0)
+    .reduce((sum, p) => sum + Math.abs(p.amount), 0);
+    
   const paidCount = allPlayers.filter(p => p.isPaid || p.amount >= 0).length;
   const progressPercent = allPlayers.length > 0 ? (paidCount / allPlayers.length) * 100 : 0;
 
@@ -98,15 +99,15 @@ export function Ledger({ events, paidStatus, onTogglePaid }: LedgerProps) {
           type="text" 
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="搜尋球員姓名..." 
+          placeholder="搜尋姓名 (球員或 Host)..." 
           className="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"
         />
       </div>
 
-      {/* 球員清單 */}
+      {/* 清單顯示區 */}
       <div className="space-y-2">
         <div className="px-3 flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
-          <span>球員名稱</span>
+          <span>姓名</span>
           <span>結餘 / 狀態</span>
         </div>
         
