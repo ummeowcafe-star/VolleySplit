@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { EventData, Session } from '../types';
 import { MatrixGrid } from './MatrixGrid';
 import { SummaryCard } from './SummaryCard';
-// ★ 加入 ArrowUp 圖示
 import { ArrowLeft, Trash2, Clock, UserPlus, X, Check, ArrowUp } from 'lucide-react';
 
 interface Props {
@@ -11,7 +10,6 @@ interface Props {
   onBack: () => void;
   onDelete: () => void;
   phoneBook: { [name: string]: string }; 
-  // ★ 新增：接收雲端聯絡人名單
   cloudContacts: { id: string; name: string; phone: string }[];
 }
 
@@ -57,7 +55,6 @@ const Modal = ({
   );
 };
 
-// ★ 修改：在解構中加入 cloudContacts
 export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDelete, phoneBook, cloudContacts }) => {
   const [modalType, setModalType] = useState<'add-session' | 'add-player' | 'delete-session' | 'delete-player' | 'delete-event' | null>(null);
   const [inputValue, setInputValue] = useState("");
@@ -65,7 +62,7 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
 
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
-  // ★ 捲動回頂部函數
+  // 捲動回頂部函數
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -144,17 +141,24 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
         <p className="text-slate-500 font-medium">此動作無法復原，確定要執行嗎？</p>
       </Modal>
 
-      {/* 2. Header */}
-      <div className="flex items-center justify-between">
-        <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-blue-700 font-black transition-colors">
+      {/* 2. Sticky Header - 固定頂部導航條 */}
+      <div className="sticky top-0 z-50 -mx-4 px-4 py-3 bg-[#f8fafc]/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between mb-2">
+        <button 
+          onClick={onBack} 
+          className="flex items-center gap-2 text-slate-500 hover:text-blue-700 font-black transition-colors active:scale-95"
+        >
           <ArrowLeft size={20} /> 返回
         </button>
-        <button onClick={() => setModalType('delete-event')} className="text-slate-300 hover:text-red-500 transition-colors">
+        
+        <button 
+          onClick={() => setModalType('delete-event')} 
+          className="text-slate-300 hover:text-red-500 transition-colors active:scale-90 p-1"
+        >
           <Trash2 size={20} />
         </button>
       </div>
 
-      <header>
+      <header className="pt-2">
         <h1 className="text-3xl font-black text-blue-900 tracking-tight">{event.eventName}</h1>
         <p className="text-slate-400 font-bold">{event.date}</p>
       </header>
@@ -172,7 +176,6 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
       {/* 4. Matrix & Summary */}
       <MatrixGrid 
         event={event} 
-        // ★ 關鍵：將 cloudContacts 傳下去給 MatrixGrid
         cloudContacts={cloudContacts} 
         onWeightChange={handleWeightChange}
         onRemoveSession={id => { setTargetId(id); setModalType('delete-session'); }}
@@ -186,7 +189,7 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
         cloudContacts={cloudContacts} 
       />
 
-      {/* ★ 5. 回頂部按鈕 */}
+      {/* 5. 回頂部按鈕 */}
       <button
         onClick={scrollToTop}
         className="fixed bottom-8 right-6 z-[60] p-4 bg-blue-700 text-white rounded-full shadow-2xl transition-all hover:bg-blue-800 active:scale-90 ring-4 ring-white"
