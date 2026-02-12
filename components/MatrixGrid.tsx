@@ -1,6 +1,8 @@
 import React from 'react';
 import { EventData } from '../types';
 import { Trash2, X, Crown } from 'lucide-react';
+// ★ 新增：引入完整的通訊錄名單
+import { PLAYER_PHONE_BOOK } from '../data/playerData';
 
 interface Props {
   event: EventData;
@@ -18,7 +20,6 @@ export const MatrixGrid: React.FC<Props> = ({ event, onWeightChange, onRemoveSes
   };
 
   const getWeightStyle = (w: number, hasHost: boolean) => {
-    // 如果沒有 Host，按鈕顏色變淡
     if (!hasHost) return 'bg-slate-50 text-slate-200 border-slate-100 cursor-not-allowed';
     if (w === 1) return 'bg-emerald-500 text-white border-emerald-600 shadow-md';
     if (w === 0.5) return 'bg-yellow-400 text-white border-yellow-500 shadow-md';
@@ -26,10 +27,9 @@ export const MatrixGrid: React.FC<Props> = ({ event, onWeightChange, onRemoveSes
   };
 
   const toggleWeight = (sessionId: string, playerId: string) => {
-    // ★ 關鍵：尋找目前的 session
     const session = event.sessions.find(s => s.id === sessionId);
     
-    // ★ 限制：如果沒選 Host，則不允許點名並跳出提醒
+    // ★ 限制：如果沒選 Host，則跳出提醒
     if (!session?.hostId) {
       alert(`請先為場次「${session?.name}」選擇代付人 (Host) 再開始點名喔！`);
       return;
@@ -77,17 +77,30 @@ export const MatrixGrid: React.FC<Props> = ({ event, onWeightChange, onRemoveSes
                     <div className="mt-2 w-full px-1">
                       <div className="flex items-center justify-center gap-1 mb-1">
                         <Crown size={10} className={session.hostId ? "text-yellow-500" : "text-blue-200"} />
-                        <span className="text-[9px] text-blue-400 uppercase">Host</span>
+                        <span className="text-[9px] text-blue-400 uppercase">Paid By</span>
                       </div>
+                      {/* ★ 改良：分組顯示代付人選擇器 */}
                       <select 
                         value={session.hostId || ''}
                         onChange={(e) => onHostChange(session.id, e.target.value)}
                         className={`w-full text-[10px] bg-white border ${!session.hostId ? 'border-red-200 animate-pulse' : 'border-blue-100'} rounded-lg py-1 px-1 outline-none focus:ring-1 focus:ring-blue-400 font-bold text-blue-700 cursor-pointer`}
                       >
                         <option value="">選擇代付人</option>
-                        {event.players.map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
+                        {/* 分組 1：今日玩家 */}
+                        <optgroup label="今日玩家">
+                          {event.players.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </optgroup>
+                        {/* 分組 2：其他聯絡人（從通訊錄抓取，過濾已在玩家名單者） */}
+                        <optgroup label="其他聯絡人 (非玩家)">
+                          {Object.keys(PLAYER_PHONE_BOOK)
+                            .filter(name => !event.players.some(p => p.name === name))
+                            .map(name => (
+                              <option key={name} value={name}>{name}</option>
+                            ))
+                          }
+                        </optgroup>
                       </select>
                     </div>
 
@@ -115,7 +128,7 @@ export const MatrixGrid: React.FC<Props> = ({ event, onWeightChange, onRemoveSes
                 {event.sessions.map(session => {
                   const weight = getWeight(session.id, player.id);
                   const isHost = session.hostId === player.id;
-                  const hasHost = !!session.hostId; // ★ 檢查該 Session 是否已有 Host
+                  const hasHost = !!session.hostId;
 
                   return (
                     <td key={session.id} className={`px-3 py-3 text-center ${isHost ? 'bg-yellow-50/30' : ''}`}>
