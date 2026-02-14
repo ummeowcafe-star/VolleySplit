@@ -1,18 +1,17 @@
 import React from 'react';
+import { Trash2, User, Crown } from 'lucide-react';
 import { EventData } from '../types';
-import { Trash2, X, Crown } from 'lucide-react';
-// ★ 修正：移除了 PLAYER_PHONE_BOOK 的引入，因為選單不再需要它了
 
-interface Props {
+interface MatrixGridProps {
   event: EventData;
   cloudContacts: { id: string; name: string; phone: string }[];
   onWeightChange: (sessionId: string, playerId: string, weight: number) => void;
-  onRemoveSession: (sessionId: string) => void;
-  onRemovePlayer: (playerId: string) => void;
+  onRemoveSession: (id: string) => void;
+  onRemovePlayer: (id: string) => void;
   onHostChange: (sessionId: string, hostId: string) => void;
 }
 
-export const MatrixGrid: React.FC<Props> = ({ 
+export const MatrixGrid: React.FC<MatrixGridProps> = ({ 
   event, 
   cloudContacts, 
   onWeightChange, 
@@ -21,134 +20,111 @@ export const MatrixGrid: React.FC<Props> = ({
   onHostChange 
 }) => {
   
-  const getWeight = (sessionId: string, playerId: string) => {
-    const key = `${sessionId}_${playerId}`;
-    return event.participation?.[key] || 0;
-  };
-
-  const getWeightStyle = (w: number, hasHost: boolean) => {
-    if (!hasHost) return 'bg-slate-50 text-slate-200 border-slate-100 cursor-not-allowed';
-    if (w === 1) return 'bg-emerald-500 text-white border-emerald-600 shadow-md';
-    if (w === 0.5) return 'bg-yellow-400 text-white border-yellow-500 shadow-md';
-    return 'bg-slate-100 text-slate-300 border-slate-200';
-  };
-
-  const toggleWeight = (sessionId: string, playerId: string) => {
-    const session = event.sessions.find(s => s.id === sessionId);
-    
-    if (!session?.hostId) {
-      alert(`請先為場次「${session?.name}」選擇代付人 (Host) 再開始點名喔！`);
-      return;
-    }
-
-    const currentWeight = getWeight(sessionId, playerId);
-    let nextWeight = 0;
-    if (currentWeight === 0) nextWeight = 1;
-    else if (currentWeight === 1) nextWeight = 0.5;
-    else nextWeight = 0;
-    
-    onWeightChange(sessionId, playerId, nextWeight);
-  };
-
-  if (!event || !event.sessions || !event.players) {
-    return <div className="p-8 text-center text-blue-300 font-bold">載入點名矩陣中...</div>;
-  }
+  // ★ 1. 排重邏輯：過濾掉已經在雲端聯絡簿中的球員，避免下拉選單出現兩次
+  const uniqueTodayPlayers = event.players.filter(player => 
+    !cloudContacts.some(cloud => cloud.name.trim() === player.name.trim())
+  );
 
   return (
-    <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden relative">
-      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-blue-50/30">
-        <h3 className="font-black text-blue-900 text-sm uppercase tracking-wider">點名矩陣</h3>
-        <div className="flex gap-3 text-[10px] font-black uppercase">
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> 1.0</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400"></span> 0.5</div>
-          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-200"></span> 0</div>
-        </div>
-      </div>
-
+    <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm animate-in fade-in zoom-in duration-500">
       <div className="overflow-x-auto no-scrollbar">
-        <table className="w-full text-sm text-left border-collapse">
+        <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-blue-50/50">
-              <th className="px-5 py-4 min-w-[130px] font-black text-blue-400 uppercase text-[10px] sticky left-0 bg-blue-50 z-20 border-b border-blue-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                Player
+            {/* 時段標題行 */}
+            <tr className="bg-slate-50/50">
+              <th className="p-4 text-left border-b border-slate-100 min-w-[120px]">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">點名矩陣</span>
               </th>
-              
-              {event.sessions.map(session => (
-                <th key={session.id} className="px-4 py-4 min-w-[130px] text-center font-black text-blue-900 border-b border-blue-100 group relative">
+              {event.sessions.map((session) => (
+                <th key={session.id} className="p-4 border-b border-slate-100 min-w-[140px] group">
                   <div className="flex flex-col items-center gap-1">
-                    <span className="text-[10px] text-blue-400 uppercase tracking-tighter">Time</span>
-                    <span className="text-xs whitespace-nowrap">{session.name}</span>
-                    <div className="text-[9px] font-bold text-blue-300">${session.cost}</div>
-                    
-                    <div className="mt-2 w-full px-1">
-                      <div className="flex items-center justify-center gap-1 mb-1">
-                        <Crown size={10} className={session.hostId ? "text-yellow-500" : "text-blue-200"} />
-                        <span className="text-[9px] text-blue-400 uppercase">Paid By</span>
-                      </div>
-                      
-                      <select 
-                        value={session.hostId || ''}
-                        onChange={(e) => onHostChange(session.id, e.target.value)}
-                        className={`w-full text-[10px] bg-white border ${!session.hostId ? 'border-red-200 animate-pulse' : 'border-blue-100'} rounded-lg py-1 px-1 outline-none focus:ring-1 focus:ring-blue-400 font-bold text-blue-700 cursor-pointer`}
-                      >
-                        <option value="">選擇代付人</option>
-                        
-                        <optgroup label="今日玩家">
-                          {event.players.map(p => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </optgroup>
-
-                        {/* ★ 雲端聯絡簿：現在這是唯一的外部名單來源 */}
-                        {cloudContacts.length > 0 && (
-                          <optgroup label="雲端聯絡簿">
-                            {cloudContacts.map(c => (
-                              <option key={c.id} value={c.name}>{c.name}</option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                    </div>
-
+                    <span className="text-[10px] font-bold text-blue-400 uppercase tracking-tighter">Time</span>
+                    <span className="text-sm font-black text-blue-900">{session.name}</span>
+                    <span className="text-[10px] font-bold text-slate-300">${session.cost}</span>
                     <button 
                       onClick={() => onRemoveSession(session.id)}
-                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 bg-red-50 text-red-400 p-1 rounded-full transition-all"
+                      className="mt-2 p-1.5 text-slate-200 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
                     >
-                      <X size={12} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </th>
               ))}
             </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {event.players.map(player => (
-              <tr key={player.id} className="hover:bg-blue-50/20 transition-colors">
-                <td className="px-5 py-4 font-black text-slate-700 sticky left-0 bg-white z-10 border-r border-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                  <div className="flex items-center justify-between group">
-                    <span className="truncate max-w-[90px]">{player.name}</span>
-                    <button onClick={() => onRemovePlayer(player.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 p-1"><Trash2 size={14} /></button>
+
+            {/* ★ 2. Host 下拉選單行 - 實裝排重過濾 */}
+            <tr className="bg-blue-50/30">
+              <td className="p-4 border-b border-slate-100 text-center">
+                <div className="flex items-center gap-2 justify-center">
+                  <Crown size={14} className="text-amber-500" />
+                  <span className="text-[10px] font-black text-slate-500 uppercase">Paid By</span>
+                </div>
+              </td>
+              {event.sessions.map((session) => (
+                <td key={session.id} className="p-2 border-b border-slate-100">
+                  <div className="bg-white border border-blue-100 rounded-xl px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-blue-600 transition-all">
+                    <select
+                      value={session.hostId || ''}
+                      onChange={(e) => onHostChange(session.id, e.target.value)}
+                      className="w-full bg-transparent text-xs font-black text-blue-700 outline-none appearance-none cursor-pointer"
+                    >
+                      <option value="">選擇付款人...</option>
+                      
+                      {/* 第一組：雲端聯絡簿 (具備電話，優先顯示) */}
+                      <optgroup label="🌟 雲端聯絡簿 (有電話)">
+                        {cloudContacts.map(c => (
+                          <option key={c.id} value={c.name}>{c.name}</option>
+                        ))}
+                      </optgroup>
+
+                      {/* 第二組：今日玩家 (已自動排除重複的人) */}
+                      <optgroup label="🏐 今日玩家">
+                        {uniqueTodayPlayers.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </optgroup>
+                    </select>
                   </div>
                 </td>
-                
-                {event.sessions.map(session => {
-                  const weight = getWeight(session.id, player.id);
-                  const isHost = session.hostId === player.id;
-                  const hasHost = !!session.hostId;
+              ))}
+            </tr>
+          </thead>
 
+          <tbody>
+            {/* 球員名單行 */}
+            {event.players.map((player) => (
+              <tr key={player.id} className="hover:bg-slate-50/50 transition-colors">
+                <td className="p-4 border-b border-slate-50 group">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                        <User size={16} />
+                      </div>
+                      <span className="font-black text-slate-700 text-sm">{player.name}</span>
+                    </div>
+                    <button 
+                      onClick={() => onRemovePlayer(player.id)}
+                      className="p-1 text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </td>
+                {event.sessions.map((session) => {
+                  const weight = event.participation?.[`${session.id}_${player.id}`] || 0;
                   return (
-                    <td key={session.id} className={`px-3 py-3 text-center ${isHost ? 'bg-yellow-50/30' : ''}`}>
+                    <td key={session.id} className="p-2 border-b border-slate-50 text-center">
                       <button
-                        type="button"
-                        onClick={() => toggleWeight(session.id, player.id)}
-                        className={`w-12 h-12 rounded-2xl border-2 transition-all duration-200 font-black text-sm relative ${getWeightStyle(weight, hasHost)} ${hasHost ? 'active:scale-90' : 'opacity-40'}`}
+                        onClick={() => onWeightChange(session.id, player.id, weight === 1 ? 0.5 : weight === 0.5 ? 0 : 1)}
+                        className={`w-12 h-12 rounded-2xl font-black text-lg transition-all active:scale-90 ${
+                          weight === 1 
+                            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-100' 
+                            : weight === 0.5
+                            ? 'bg-amber-400 text-white shadow-lg shadow-amber-100'
+                            : 'bg-slate-50 text-slate-200'
+                        }`}
                       >
-                        {weight === 1 ? '1' : weight === 0.5 ? '.5' : ''}
-                        {isHost && (
-                          <div className="absolute -top-2 -right-2 bg-yellow-400 text-white p-0.5 rounded-full border-2 border-white">
-                            <Crown size={8} fill="white" />
-                          </div>
-                        )}
+                        {weight > 0 ? (weight === 1 ? '1' : '½') : '0'}
                       </button>
                     </td>
                   );
