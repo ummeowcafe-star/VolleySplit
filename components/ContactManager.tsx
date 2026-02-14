@@ -21,9 +21,6 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
   const [phone, setPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ★ ID 生成器：確保新增時雲端有唯一的 Key
-  const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-
   // 打開新增視窗
   const openAddModal = () => {
     setEditingContact(null);
@@ -36,7 +33,7 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
   const openEditModal = (contact: Contact) => {
     setEditingContact(contact);
     setName(contact.name);
-    // 如果是 unknown，顯示空字串方便填寫
+    // 如果是 unknown，顯示空字串讓 Owen 方便輸入新號碼
     setPhone(contact.phone === 'unknown' ? '' : contact.phone);
     setIsModalOpen(true);
   };
@@ -48,7 +45,7 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
     }
     setIsSubmitting(true);
 
-    // ★ 核心邏輯：如果沒填電話，預設為 'unknown'
+    // ★ 核心邏輯：如果沒填電話，自動設為 'unknown'
     const finalPhone = phone.trim() || 'unknown';
 
     try {
@@ -60,11 +57,11 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
           .eq('id', editingContact.id);
         if (error) throw error;
       } else {
-        // 執行新增 (加入手動生成的 ID)
+        // ★ 核心修正：使用標準 crypto.randomUUID() 符合 Supabase 的 UUID 格式
         const { error } = await supabase
           .from('contacts')
           .insert([{ 
-            id: generateId(), 
+            id: crypto.randomUUID(), 
             name: name.trim(), 
             phone: finalPhone, 
             user_id: userId 
@@ -73,9 +70,10 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
       }
 
       setIsModalOpen(false);
-      onRefresh();
+      onRefresh(); // 成功後刷新清單
     } catch (e: any) {
       console.error('Database Error:', e);
+      // 顯示具體錯誤，方便 Owen 確認是否為權限 (RLS) 問題
       alert(`儲存失敗: ${e.message}`);
     } finally {
       setIsSubmitting(false);
@@ -90,7 +88,7 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      {/* 頂部標題與新增按鈕 */}
+      {/* 1. Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-black text-blue-900">雲端聯絡簿</h2>
@@ -98,13 +96,13 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
         </div>
         <button 
           onClick={openAddModal}
-          className="bg-blue-700 text-white p-4 rounded-2xl shadow-lg shadow-blue-100 active:scale-90 transition-all"
+          className="bg-blue-700 text-white p-4 rounded-2xl shadow-lg active:scale-90 transition-all"
         >
           <UserPlus size={24} />
         </button>
       </div>
 
-      {/* 列表清單 */}
+      {/* 2. Contact List */}
       <div className="space-y-3">
         {contacts.map((contact) => (
           <div key={contact.id} className="bg-white p-4 rounded-[1.8rem] border border-slate-100 shadow-sm flex items-center justify-between">
@@ -121,25 +119,18 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
             </div>
             
             <div className="flex items-center gap-2">
-              <button onClick={() => openEditModal(contact)} className="p-2.5 text-slate-400 hover:text-blue-600 rounded-xl transition-all">
+              <button onClick={() => openEditModal(contact)} className="p-2.5 text-slate-400 hover:text-blue-600 rounded-xl">
                 <Edit2 size={18} />
               </button>
-              <button onClick={() => handleDelete(contact.id)} className="p-2.5 text-slate-400 hover:text-red-500 rounded-xl transition-all">
+              <button onClick={() => handleDelete(contact.id)} className="p-2.5 text-slate-400 hover:text-red-500 rounded-xl">
                 <Trash2 size={18} />
               </button>
             </div>
           </div>
         ))}
-
-        {contacts.length === 0 && (
-          <div className="py-20 text-center bg-white rounded-[2.5rem] border border-dashed border-slate-200">
-            <RefreshCw size={40} className="mx-auto text-slate-200 mb-2" />
-            <p className="text-slate-400 font-bold">目前沒有雲端聯絡人</p>
-          </div>
-        )}
       </div>
 
-      {/* 新增/編輯 彈窗 */}
+      {/* 3. Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-blue-900/40 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
@@ -148,42 +139,22 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
               <h3 className="font-black text-blue-900">{editingContact ? '編輯聯絡人' : '新增聯絡人'}</h3>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400"><X size={20} /></button>
             </div>
-            
             <div className="p-8 space-y-5">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">球員姓名</label>
-                <div className="relative">
-                  <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
-                  <input 
-                    value={name} onChange={e => setName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 pl-11 pr-4 font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-600 transition-all"
-                    placeholder="例如: 新朋友小明"
-                  />
-                </div>
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">姓名</label>
+                <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-4 font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-600" placeholder="例如: Angela" />
               </div>
-
               <div className="space-y-1.5">
-                <div className="flex justify-between items-center ml-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase">轉帳電話 (選填)</label>
-                  {!phone && <span className="text-[9px] font-bold text-amber-500 bg-amber-50 px-2 py-0.5 rounded-full">稍後補錄</span>}
-                </div>
-                <div className="relative">
-                  <Phone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
-                  <input 
-                    value={phone} onChange={e => setPhone(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 pl-11 pr-4 font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-600 transition-all"
-                    placeholder="可暫時留空"
-                  />
-                </div>
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">電話 / 轉帳號碼 (選填)</label>
+                <input value={phone} onChange={e => setPhone(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-4 font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-600" placeholder="留空則預設為待補" />
               </div>
-
               <button 
                 onClick={handleSubmit}
                 disabled={isSubmitting}
-                className="w-full bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50 mt-4"
+                className="w-full bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
               >
                 {isSubmitting ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
-                儲存雲端資料
+                儲存資料
               </button>
             </div>
           </div>
