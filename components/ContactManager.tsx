@@ -142,7 +142,7 @@ export const ContactManager: React.FC<Props> = ({ contacts, onRefresh, userId })
             <div className="p-8 space-y-5">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase ml-1">姓名</label>
-                <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-4 font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-600" placeholder="例如: Angela" />
+                <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-3.5 px-4 font-bold text-blue-900 outline-none focus:ring-2 focus:ring-blue-600" placeholder="例如: Carol" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase ml-1">電話 / 轉帳號碼 (選填)</label>

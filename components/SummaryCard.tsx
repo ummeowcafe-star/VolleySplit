@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { DollarSign, ArrowRight, CheckCircle2, User, Copy, Check } from 'lucide-react';
 
-// 定義 Props 介面
 interface SummaryCardProps {
   event: any;
   phoneBook: { [name: string]: string }; 
@@ -12,14 +11,12 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
   const safePhoneBook = phoneBook || {}; 
   const safeCloudContacts = cloudContacts || [];
 
-  // 名稱搜尋邏輯
   const getPlayerName = (id: string) => {
     const player = event.players.find((p: any) => p.id === id);
     if (player) return player.name;
     return id || "未知"; 
   };
 
-  // 整合搜尋器：排除 null、空值及 "unknown" 字串
   const findPhone = (name: string) => {
     let phone = null;
     if (safePhoneBook[name]) {
@@ -28,21 +25,26 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
       const cloudMatch = safeCloudContacts.find(c => c.name === name);
       if (cloudMatch) phone = cloudMatch.phone;
     }
-
-    if (!phone || phone.toLowerCase() === 'unknown' || phone.trim() === '') {
-      return null;
-    }
+    if (!phone || phone.toLowerCase() === 'unknown' || phone.trim() === '') return null;
     return phone;
   };
 
+  // ★ 核心修正：統一身份標識
   const balances: { [playerId: string]: number } = {};
   event.players.forEach((p: any) => { balances[p.id] = 0; });
 
-  // 1. 計算淨額 (代付 - 消費)
   event.sessions.forEach((session: any) => {
     if (session.hostId) {
-      if (balances[session.hostId] === undefined) balances[session.hostId] = 0;
-      balances[session.hostId] += session.cost;
+      // 如果 hostId 是人名，嘗試找到對應的玩家 ID
+      let targetId = session.hostId;
+      const playerByName = event.players.find((p: any) => p.name === session.hostId || p.id === session.hostId);
+      
+      if (playerByName) {
+        targetId = playerByName.id;
+      }
+
+      if (balances[targetId] === undefined) balances[targetId] = 0;
+      balances[targetId] += session.cost;
     }
   });
 
@@ -63,7 +65,6 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
     }
   });
 
-  // 2. 準備債務與債權清單
   const debtors: { id: string; amount: number }[] = [];
   const creditors: { id: string; amount: number }[] = [];
 
@@ -75,7 +76,6 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
   debtors.sort((a, b) => b.amount - a.amount);
   creditors.sort((a, b) => b.amount - a.amount);
 
-  // 3. 撮合轉帳
   const transactions: { from: string; to: string; amount: number }[] = [];
   const tempDebtors = JSON.parse(JSON.stringify(debtors));
   const tempCreditors = JSON.parse(JSON.stringify(creditors));
@@ -148,10 +148,9 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
                     {receiverPhone ? (
                       <span className="text-xs font-black text-blue-600 font-mono">{receiverPhone}</span>
                     ) : (
-                      <span className="text-xs font-black text-red-400">Unknown</span>
+                      <span className="text-xs font-black text-amber-500 animate-pulse">待補電話</span>
                     )}
                   </div>
-
                   {receiverPhone && (
                     <button 
                       onClick={() => handleCopy(uniqueKey, receiverPhone)}
