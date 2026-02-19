@@ -20,10 +20,14 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
   const findPhone = (name: string) => {
     if (!name) return null;
     const searchName = name.trim().toLowerCase();
+    
+    // 1. 優先從雲端搜尋 (Cloud-first)
     const cloudMatch = safeCloudContacts.find(c => c.name.trim().toLowerCase() === searchName);
     if (cloudMatch && cloudMatch.phone && cloudMatch.phone.toLowerCase() !== 'unknown' && cloudMatch.phone.trim() !== '') {
       return cloudMatch.phone;
     }
+    
+    // 2. 次要搜尋本地硬編碼名單
     const localPhone = safePhoneBook[name]; 
     if (localPhone && localPhone.toLowerCase() !== 'unknown' && localPhone.trim() !== '') {
       return localPhone;
@@ -34,6 +38,7 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
   const balances: { [playerId: string]: number } = {};
   event.players.forEach((p: any) => { balances[p.id] = 0; });
 
+  // 計算代付金額
   event.sessions.forEach((session: any) => {
     if (session.hostId) {
       let targetId = session.hostId;
@@ -44,6 +49,7 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
     }
   });
 
+  // 分攤場地費
   event.sessions.forEach((session: any) => {
     const participants = event.players.filter((p: any) => (event.participation?.[`${session.id}_${p.id}`] || 0) > 0);
     const totalWeight = participants.reduce((sum: number, p: any) => sum + (event.participation?.[`${session.id}_${p.id}`] || 0), 0);
@@ -58,6 +64,7 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
 
   const debtors: { id: string; amount: number }[] = [];
   const creditors: { id: string; amount: number }[] = [];
+  
   Object.entries(balances).forEach(([id, balance]) => {
     if (balance < -0.1) debtors.push({ id, amount: Math.abs(balance) });
     else if (balance > 0.1) creditors.push({ id, amount: balance });
@@ -70,6 +77,7 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
   const tempDebtors = JSON.parse(JSON.stringify(debtors));
   const tempCreditors = JSON.parse(JSON.stringify(creditors));
   let dIdx = 0, cIdx = 0;
+  
   while (dIdx < tempDebtors.length && cIdx < tempCreditors.length) {
     const d = tempDebtors[dIdx], c = tempCreditors[cIdx];
     const settleAmount = Math.min(d.amount, c.amount);
@@ -89,7 +97,8 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
   };
 
   return (
-    <section className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
+    <section className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* 標題區塊 */}
       <div className="bg-blue-700 p-6 flex items-center justify-between text-white">
         <div className="flex items-center gap-3">
           <div className="bg-white/20 p-2.5 rounded-2xl"><DollarSign size={24} /></div>
@@ -99,6 +108,7 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
           </div>
         </div>
       </div>
+
       <div className="p-4 space-y-3">
         {transactions.length === 0 ? (
           <div className="py-12 text-center space-y-2">
@@ -111,7 +121,7 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
             const receiverPhone = findPhone(receiverName); 
             const uniqueKey = `tx-${idx}`;
             return (
-              <div key={idx} className="bg-slate-50 border border-slate-100 rounded-[1.5rem] p-4 flex flex-col gap-3">
+              <div key={idx} className="bg-slate-50 border border-slate-100 rounded-[1.5rem] p-4 flex flex-col gap-3 transition-all hover:bg-slate-100/50">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="flex flex-col">
@@ -128,7 +138,8 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
                     <span className="text-xl font-black text-blue-900 tracking-tighter">${tx.amount.toFixed(1)}</span>
                   </div>
                 </div>
-                <div className="flex items-center justify-between bg-white rounded-xl px-4 py-2 border border-blue-50">
+                
+                <div className="flex items-center justify-between bg-white rounded-xl px-4 py-2 border border-blue-50 shadow-sm">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">轉帳電話:</span>
                     {receiverPhone ? (
@@ -138,7 +149,12 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
                     )}
                   </div>
                   {receiverPhone && (
-                    <button onClick={() => handleCopy(uniqueKey, receiverPhone)} className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-black transition-all ${copiedKey === uniqueKey ? 'bg-emerald-500 text-white' : 'bg-blue-100 text-blue-700'}`}>
+                    <button 
+                      onClick={() => handleCopy(uniqueKey, receiverPhone)} 
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-black transition-all ${
+                        copiedKey === uniqueKey ? 'bg-emerald-500 text-white' : 'bg-blue-100 text-blue-700'
+                      }`}
+                    >
                       {copiedKey === uniqueKey ? <Check size={12} /> : <Copy size={12} />}
                       {copiedKey === uniqueKey ? '已複製' : '複製號碼'}
                     </button>
@@ -149,6 +165,23 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
           })
         )}
       </div>
+
+      {/* ★ 新增：收款人彙整區塊 */}
+      {creditors.length > 0 && (
+        <div className="px-6 pb-6 pt-2 border-t border-slate-100 mt-2">
+          <div className="flex items-center gap-2 mb-3">
+             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">本場收款人彙整</h4>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {creditors.map(c => (
+              <div key={c.id} className="bg-blue-50 text-blue-700 px-4 py-2 rounded-2xl text-xs font-black flex items-center gap-2 border border-blue-100/50 shadow-sm">
+                <User size={12} className="text-blue-400" /> 
+                {getPlayerName(c.id)}: <span className="text-blue-900">${c.amount.toFixed(1)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
