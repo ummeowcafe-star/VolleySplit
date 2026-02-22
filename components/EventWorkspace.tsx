@@ -181,6 +181,9 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
         onRemoveSession={id => { setTargetId(id); setModalType('delete-session'); }}
         onRemovePlayer={id => { setTargetId(id); setModalType('delete-player'); }}
         onHostChange={handleHostChange} 
+        // ★ 核心補全：把拖曳排序的結果存進 event 裡
+        onReorderPlayers={(newPlayers) => onUpdate({ ...event, players: newPlayers })}
+        onReorderSessions={(newSessions) => onUpdate({ ...event, sessions: newSessions })}
       />
       
       <SummaryCard 

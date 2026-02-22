@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { EventData } from '../types';
 import { Trash2, X, Crown, GripVertical, GripHorizontal } from 'lucide-react';
 
@@ -24,63 +24,82 @@ export const MatrixGrid: React.FC<Props> = ({
   onReorderSessions
 }) => {
   
-  const [draggedPlayerIdx, setDraggedPlayerIdx] = useState<number | null>(null);
-  const [draggedSessionIdx, setDraggedSessionIdx] = useState<number | null>(null);
+  // ★ 專為手機打造的拖曳狀態管理
+  const [dragInfo, setDragInfo] = useState<{ type: 'player' | 'session', index: number } | null>(null);
 
-  // ==========================================
-  // ★ 場次 (Column) 實時拖曳邏輯
-  // ==========================================
-  const handleSessionDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedSessionIdx(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', index.toString()); // 修正 Safari/Firefox 拖曳失效的 Bug
-  };
+  // 使用 Ref 確保在事件監聽器中能拿到最新的資料，避免資料殘留
+  const eventRef = useRef(event);
+  eventRef.current = event;
+  const dragInfoRef = useRef(dragInfo);
+  dragInfoRef.current = dragInfo;
 
-  const handleSessionDragEnter = (e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    if (draggedSessionIdx === null || draggedSessionIdx === targetIndex || !onReorderSessions) return;
+  useEffect(() => {
+    if (!dragInfo) return;
 
-    // 實時換位：只要經過就立刻交換
-    const newSessions = [...event.sessions];
-    const [movedSession] = newSessions.splice(draggedSessionIdx, 1);
-    newSessions.splice(targetIndex, 0, movedSession);
+    // 阻擋手機預設的滾動行為，讓拖曳更加絲滑
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      const info = dragInfoRef.current;
+      const evt = eventRef.current;
+      if (!info || !evt) return;
+
+      // 取得手指目前座標下的所有 DOM 元素
+      const elementsUnderPointer = document.elementsFromPoint(e.clientX, e.clientY);
+
+      if (info.type === 'player') {
+        // 尋找手指下方的 Row
+        const targetTr = elementsUnderPointer.find(el => el.hasAttribute('data-player-index'));
+        if (targetTr) {
+          const targetIndex = parseInt(targetTr.getAttribute('data-player-index') || '-1', 10);
+          if (targetIndex !== -1 && targetIndex !== info.index) {
+            const newPlayers = [...evt.players];
+            const [moved] = newPlayers.splice(info.index, 1);
+            newPlayers.splice(targetIndex, 0, moved);
+            onReorderPlayers?.(newPlayers);
+            setDragInfo({ type: 'player', index: targetIndex }); // 實時更新位置
+          }
+        }
+      } else if (info.type === 'session') {
+        // 尋找手指下方的 Column
+        const targetTh = elementsUnderPointer.find(el => el.hasAttribute('data-session-index'));
+        if (targetTh) {
+          const targetIndex = parseInt(targetTh.getAttribute('data-session-index') || '-1', 10);
+          if (targetIndex !== -1 && targetIndex !== info.index) {
+            const newSessions = [...evt.sessions];
+            const [moved] = newSessions.splice(info.index, 1);
+            newSessions.splice(targetIndex, 0, moved);
+            onReorderSessions?.(newSessions);
+            setDragInfo({ type: 'session', index: targetIndex }); // 實時更新位置
+          }
+        }
+      }
+    };
+
+    const handlePointerUp = () => {
+      setDragInfo(null);
+    };
+
+    // 綁定全域事件
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
+    document.addEventListener('pointercancel', handlePointerUp);
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
     
-    onReorderSessions(newSessions);
-    setDraggedSessionIdx(targetIndex); // 更新索引，讓拖曳可以連續進行
-  };
+    // 防止拖曳時反白文字
+    document.body.style.userSelect = 'none';
 
-  // ==========================================
-  // ★ 玩家 (Row) 實時拖曳邏輯
-  // ==========================================
-  const handlePlayerDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedPlayerIdx(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', index.toString()); // 修正 Safari/Firefox 拖曳失效的 Bug
-  };
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.removeEventListener('pointercancel', handlePointerUp);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.body.style.userSelect = '';
+    };
+  }, [dragInfo, onReorderPlayers, onReorderSessions]);
 
-  const handlePlayerDragEnter = (e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    if (draggedPlayerIdx === null || draggedPlayerIdx === targetIndex || !onReorderPlayers) return;
-
-    // 實時換位
-    const newPlayers = [...event.players];
-    const [movedPlayer] = newPlayers.splice(draggedPlayerIdx, 1);
-    newPlayers.splice(targetIndex, 0, movedPlayer);
-    
-    onReorderPlayers(newPlayers);
-    setDraggedPlayerIdx(targetIndex);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault(); // 必須阻擋預設行為，才能允許放置
-  };
-
-  const handleDragEnd = () => {
-    setDraggedPlayerIdx(null);
-    setDraggedSessionIdx(null);
-  };
-
-  // ==========================================
 
   const uniqueTodayPlayers = event.players.filter(player => 
     !cloudContacts.some(cloud => cloud.name.trim() === player.name.trim())
@@ -138,16 +157,19 @@ export const MatrixGrid: React.FC<Props> = ({
               {event.sessions.map((session, index) => (
                 <th 
                   key={session.id} 
-                  draggable
-                  onDragStart={(e) => handleSessionDragStart(e, index)}
-                  onDragEnter={(e) => handleSessionDragEnter(e, index)}
-                  onDragOver={handleDragOver}
-                  onDragEnd={handleDragEnd}
-                  className={`px-4 py-4 min-w-[130px] text-center font-black text-blue-900 border-b border-blue-100 group relative transition-all ${draggedSessionIdx === index ? 'opacity-30 bg-blue-100' : ''}`}
+                  data-session-index={index}
+                  className={`px-4 py-4 min-w-[130px] text-center font-black text-blue-900 border-b border-blue-100 group relative transition-all ${dragInfo?.type === 'session' && dragInfo.index === index ? 'opacity-60 bg-blue-100 shadow-inner' : ''}`}
                 >
                   <div className="flex flex-col items-center gap-1">
-                    <div className="cursor-grab active:cursor-grabbing text-blue-200 hover:text-blue-500 mb-1 opacity-50 hover:opacity-100">
-                      <GripHorizontal size={14} />
+                    {/* ★ 時段拖曳手把 */}
+                    <div 
+                      className="touch-none p-2 -mt-2 cursor-grab active:cursor-grabbing text-blue-300 hover:text-blue-600"
+                      onPointerDown={(e) => {
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                        setDragInfo({ type: 'session', index });
+                      }}
+                    >
+                      <GripHorizontal size={18} />
                     </div>
 
                     <span className="text-[10px] text-blue-400 uppercase tracking-tighter">Time</span>
@@ -196,18 +218,22 @@ export const MatrixGrid: React.FC<Props> = ({
             {event.players.map((player, index) => (
               <tr 
                 key={player.id} 
-                draggable
-                onDragStart={(e) => handlePlayerDragStart(e, index)}
-                onDragEnter={(e) => handlePlayerDragEnter(e, index)}
-                onDragOver={handleDragOver}
-                onDragEnd={handleDragEnd}
-                className={`transition-colors ${draggedPlayerIdx === index ? 'opacity-30 bg-slate-100' : 'hover:bg-blue-50/20'}`}
+                data-player-index={index}
+                className={`transition-colors ${dragInfo?.type === 'player' && dragInfo.index === index ? 'opacity-60 bg-blue-50/80 shadow-inner' : 'hover:bg-blue-50/20'}`}
               >
                 <td className="px-5 py-4 sticky left-0 bg-white z-10 border-r border-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                   <div className="flex items-center justify-between group">
-                    <div className="flex items-center gap-2">
-                      <GripVertical size={14} className="text-slate-300 cursor-grab active:cursor-grabbing opacity-50 hover:opacity-100" />
-                      {/* ★ 字體顏色恢復為黑色 font-black text-slate-700 */}
+                    <div className="flex items-center gap-1.5">
+                      {/* ★ 人名拖曳手把：加入 touch-none 關鍵字 */}
+                      <div 
+                        className="touch-none p-2 -ml-3 cursor-grab active:cursor-grabbing text-slate-300 hover:text-blue-500"
+                        onPointerDown={(e) => {
+                          e.currentTarget.setPointerCapture(e.pointerId);
+                          setDragInfo({ type: 'player', index });
+                        }}
+                      >
+                        <GripVertical size={18} />
+                      </div>
                       <span className="truncate max-w-[70px] font-black text-slate-700">{player.name}</span>
                     </div>
                     <button onClick={() => onRemovePlayer(player.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 p-1"><Trash2 size={14} /></button>
