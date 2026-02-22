@@ -24,82 +24,84 @@ export const MatrixGrid: React.FC<Props> = ({
   onReorderSessions
 }) => {
   
-  // ★ 專為手機打造的拖曳狀態管理
   const [dragInfo, setDragInfo] = useState<{ type: 'player' | 'session', index: number } | null>(null);
 
-  // 使用 Ref 確保在事件監聽器中能拿到最新的資料，避免資料殘留
-  const eventRef = useRef(event);
-  eventRef.current = event;
-  const dragInfoRef = useRef(dragInfo);
-  dragInfoRef.current = dragInfo;
+  // ★ 核心解法：使用 Ref 儲存最新狀態，避免拖曳時 React 重繪打斷手指觸控事件
+  const stateRef = useRef({ event, dragInfo, onReorderPlayers, onReorderSessions });
+  stateRef.current = { event, dragInfo, onReorderPlayers, onReorderSessions };
 
   useEffect(() => {
-    if (!dragInfo) return;
-
-    // 阻擋手機預設的滾動行為，讓拖曳更加絲滑
+    // 阻擋手機預設的上下滾動，確保拖曳絕對順滑
     const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
+      if (stateRef.current.dragInfo) {
+        e.preventDefault(); 
+      }
     };
 
     const handlePointerMove = (e: PointerEvent) => {
-      const info = dragInfoRef.current;
-      const evt = eventRef.current;
+      const { dragInfo: info, event: evt, onReorderPlayers: cbPlayers, onReorderSessions: cbSessions } = stateRef.current;
       if (!info || !evt) return;
 
-      // 取得手指目前座標下的所有 DOM 元素
-      const elementsUnderPointer = document.elementsFromPoint(e.clientX, e.clientY);
+      // X光掃描手指目前的精準位置
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      if (!target) return;
 
       if (info.type === 'player') {
-        // 尋找手指下方的 Row
-        const targetTr = elementsUnderPointer.find(el => el.hasAttribute('data-player-index'));
-        if (targetTr) {
-          const targetIndex = parseInt(targetTr.getAttribute('data-player-index') || '-1', 10);
+        // 精準鎖定手指下方的人名列 (Row)
+        const targetRow = target.closest('[data-player-index]');
+        if (targetRow) {
+          const targetIndex = parseInt(targetRow.getAttribute('data-player-index') || '-1', 10);
           if (targetIndex !== -1 && targetIndex !== info.index) {
             const newPlayers = [...evt.players];
             const [moved] = newPlayers.splice(info.index, 1);
             newPlayers.splice(targetIndex, 0, moved);
-            onReorderPlayers?.(newPlayers);
-            setDragInfo({ type: 'player', index: targetIndex }); // 實時更新位置
+            
+            cbPlayers?.(newPlayers);
+            
+            // 立即更新 Ref 與 State
+            const nextInfo = { type: 'player' as const, index: targetIndex };
+            stateRef.current.dragInfo = nextInfo;
+            setDragInfo(nextInfo);
           }
         }
       } else if (info.type === 'session') {
-        // 尋找手指下方的 Column
-        const targetTh = elementsUnderPointer.find(el => el.hasAttribute('data-session-index'));
-        if (targetTh) {
-          const targetIndex = parseInt(targetTh.getAttribute('data-session-index') || '-1', 10);
+        // 精準鎖定手指下方的時段欄 (Column)
+        const targetCol = target.closest('[data-session-index]');
+        if (targetCol) {
+          const targetIndex = parseInt(targetCol.getAttribute('data-session-index') || '-1', 10);
           if (targetIndex !== -1 && targetIndex !== info.index) {
             const newSessions = [...evt.sessions];
             const [moved] = newSessions.splice(info.index, 1);
             newSessions.splice(targetIndex, 0, moved);
-            onReorderSessions?.(newSessions);
-            setDragInfo({ type: 'session', index: targetIndex }); // 實時更新位置
+            
+            cbSessions?.(newSessions);
+            
+            const nextInfo = { type: 'session' as const, index: targetIndex };
+            stateRef.current.dragInfo = nextInfo;
+            setDragInfo(nextInfo);
           }
         }
       }
     };
 
     const handlePointerUp = () => {
+      stateRef.current.dragInfo = null;
       setDragInfo(null);
     };
 
-    // 綁定全域事件
-    document.addEventListener('pointermove', handlePointerMove);
+    // 註冊全域事件 (只執行一次，絕對不中斷)
+    document.addEventListener('pointermove', handlePointerMove, { passive: false });
     document.addEventListener('pointerup', handlePointerUp);
     document.addEventListener('pointercancel', handlePointerUp);
     document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    
-    // 防止拖曳時反白文字
-    document.body.style.userSelect = 'none';
 
     return () => {
       document.removeEventListener('pointermove', handlePointerMove);
       document.removeEventListener('pointerup', handlePointerUp);
       document.removeEventListener('pointercancel', handlePointerUp);
       document.removeEventListener('touchmove', handleTouchMove);
-      document.body.style.userSelect = '';
     };
-  }, [dragInfo, onReorderPlayers, onReorderSessions]);
-
+  }, []); // 空陣列確保 Listener 永遠不被註銷
 
   const uniqueTodayPlayers = event.players.filter(player => 
     !cloudContacts.some(cloud => cloud.name.trim() === player.name.trim())
@@ -147,7 +149,7 @@ export const MatrixGrid: React.FC<Props> = ({
       </div>
 
       <div className="overflow-x-auto no-scrollbar">
-        <table className="w-full text-sm text-left border-collapse">
+        <table className="w-full text-sm text-left border-collapse touch-pan-y">
           <thead>
             <tr className="bg-blue-50/50">
               <th className="px-5 py-4 min-w-[130px] font-black text-blue-400 uppercase text-[10px] sticky left-0 bg-blue-50 z-20 border-b border-blue-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
@@ -161,9 +163,9 @@ export const MatrixGrid: React.FC<Props> = ({
                   className={`px-4 py-4 min-w-[130px] text-center font-black text-blue-900 border-b border-blue-100 group relative transition-all ${dragInfo?.type === 'session' && dragInfo.index === index ? 'opacity-60 bg-blue-100 shadow-inner' : ''}`}
                 >
                   <div className="flex flex-col items-center gap-1">
-                    {/* ★ 時段拖曳手把 */}
+                    {/* ★ 時段的拖曳把手 */}
                     <div 
-                      className="touch-none p-2 -mt-2 cursor-grab active:cursor-grabbing text-blue-300 hover:text-blue-600"
+                      className="touch-none p-3 -mt-2 cursor-grab active:cursor-grabbing text-blue-300 hover:text-blue-600"
                       onPointerDown={(e) => {
                         e.currentTarget.setPointerCapture(e.pointerId);
                         setDragInfo({ type: 'session', index });
@@ -223,10 +225,10 @@ export const MatrixGrid: React.FC<Props> = ({
               >
                 <td className="px-5 py-4 sticky left-0 bg-white z-10 border-r border-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                   <div className="flex items-center justify-between group">
-                    <div className="flex items-center gap-1.5">
-                      {/* ★ 人名拖曳手把：加入 touch-none 關鍵字 */}
+                    <div className="flex items-center gap-0.5">
+                      {/* ★ 人名的拖曳把手 (已放大觸控範圍 p-3) */}
                       <div 
-                        className="touch-none p-2 -ml-3 cursor-grab active:cursor-grabbing text-slate-300 hover:text-blue-500"
+                        className="touch-none p-3 -ml-4 cursor-grab active:cursor-grabbing text-slate-300 hover:text-blue-500"
                         onPointerDown={(e) => {
                           e.currentTarget.setPointerCapture(e.pointerId);
                           setDragInfo({ type: 'player', index });
@@ -246,7 +248,7 @@ export const MatrixGrid: React.FC<Props> = ({
                   const hasHost = !!session.hostId;
 
                   return (
-                    <td key={session.id} className={`px-3 py-3 text-center ${isHost ? 'bg-yellow-50/30' : ''}`}>
+                    <td key={session.id} data-session-index={event.sessions.findIndex(s => s.id === session.id)} className={`px-3 py-3 text-center ${isHost ? 'bg-yellow-50/30' : ''}`}>
                       <button
                         type="button"
                         onClick={() => toggleWeight(session.id, player.id)}
