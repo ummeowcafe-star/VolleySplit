@@ -26,12 +26,11 @@ export const MatrixGrid: React.FC<Props> = ({
   
   const [dragInfo, setDragInfo] = useState<{ type: 'player' | 'session', index: number } | null>(null);
 
-  // ★ 核心解法：使用 Ref 儲存最新狀態，避免拖曳時 React 重繪打斷手指觸控事件
   const stateRef = useRef({ event, dragInfo, onReorderPlayers, onReorderSessions });
   stateRef.current = { event, dragInfo, onReorderPlayers, onReorderSessions };
 
   useEffect(() => {
-    // 阻擋手機預設的上下滾動，確保拖曳絕對順滑
+    // 只有在「拖曳中」才阻擋預設滾動，平時允許正常滑動
     const handleTouchMove = (e: TouchEvent) => {
       if (stateRef.current.dragInfo) {
         e.preventDefault(); 
@@ -42,12 +41,10 @@ export const MatrixGrid: React.FC<Props> = ({
       const { dragInfo: info, event: evt, onReorderPlayers: cbPlayers, onReorderSessions: cbSessions } = stateRef.current;
       if (!info || !evt) return;
 
-      // X光掃描手指目前的精準位置
       const target = document.elementFromPoint(e.clientX, e.clientY);
       if (!target) return;
 
       if (info.type === 'player') {
-        // 精準鎖定手指下方的人名列 (Row)
         const targetRow = target.closest('[data-player-index]');
         if (targetRow) {
           const targetIndex = parseInt(targetRow.getAttribute('data-player-index') || '-1', 10);
@@ -58,14 +55,12 @@ export const MatrixGrid: React.FC<Props> = ({
             
             cbPlayers?.(newPlayers);
             
-            // 立即更新 Ref 與 State
             const nextInfo = { type: 'player' as const, index: targetIndex };
             stateRef.current.dragInfo = nextInfo;
             setDragInfo(nextInfo);
           }
         }
       } else if (info.type === 'session') {
-        // 精準鎖定手指下方的時段欄 (Column)
         const targetCol = target.closest('[data-session-index]');
         if (targetCol) {
           const targetIndex = parseInt(targetCol.getAttribute('data-session-index') || '-1', 10);
@@ -89,7 +84,6 @@ export const MatrixGrid: React.FC<Props> = ({
       setDragInfo(null);
     };
 
-    // 註冊全域事件 (只執行一次，絕對不中斷)
     document.addEventListener('pointermove', handlePointerMove, { passive: false });
     document.addEventListener('pointerup', handlePointerUp);
     document.addEventListener('pointercancel', handlePointerUp);
@@ -101,7 +95,7 @@ export const MatrixGrid: React.FC<Props> = ({
       document.removeEventListener('pointercancel', handlePointerUp);
       document.removeEventListener('touchmove', handleTouchMove);
     };
-  }, []); // 空陣列確保 Listener 永遠不被註銷
+  }, []); 
 
   const uniqueTodayPlayers = event.players.filter(player => 
     !cloudContacts.some(cloud => cloud.name.trim() === player.name.trim())
@@ -149,7 +143,8 @@ export const MatrixGrid: React.FC<Props> = ({
       </div>
 
       <div className="overflow-x-auto no-scrollbar">
-        <table className="w-full text-sm text-left border-collapse touch-pan-y">
+        {/* ★ 核心修正：移除了 touch-pan-y，恢復橫向滑動 */}
+        <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="bg-blue-50/50">
               <th className="px-5 py-4 min-w-[130px] font-black text-blue-400 uppercase text-[10px] sticky left-0 bg-blue-50 z-20 border-b border-blue-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
@@ -163,7 +158,6 @@ export const MatrixGrid: React.FC<Props> = ({
                   className={`px-4 py-4 min-w-[130px] text-center font-black text-blue-900 border-b border-blue-100 group relative transition-all ${dragInfo?.type === 'session' && dragInfo.index === index ? 'opacity-60 bg-blue-100 shadow-inner' : ''}`}
                 >
                   <div className="flex flex-col items-center gap-1">
-                    {/* ★ 時段的拖曳把手 */}
                     <div 
                       className="touch-none p-3 -mt-2 cursor-grab active:cursor-grabbing text-blue-300 hover:text-blue-600"
                       onPointerDown={(e) => {
@@ -226,7 +220,6 @@ export const MatrixGrid: React.FC<Props> = ({
                 <td className="px-5 py-4 sticky left-0 bg-white z-10 border-r border-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                   <div className="flex items-center justify-between group">
                     <div className="flex items-center gap-0.5">
-                      {/* ★ 人名的拖曳把手 (已放大觸控範圍 p-3) */}
                       <div 
                         className="touch-none p-3 -ml-4 cursor-grab active:cursor-grabbing text-slate-300 hover:text-blue-500"
                         onPointerDown={(e) => {
