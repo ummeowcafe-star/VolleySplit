@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, List, Receipt, User, Plus, Trash2, Save, Crown, Clock, UserPlus } from 'lucide-react';
+import { Settings, List, Receipt, User, Plus, Trash2, Save, Crown, Clock, UserPlus, Calendar as CalendarIcon } from 'lucide-react';
 import { EventWorkspace } from './components/EventWorkspace';
 import { EventList } from './components/EventList';
 import { Ledger } from './components/Ledger';
 import { ContactManager } from './components/ContactManager'; 
 import { supabase } from './supabaseClient'; 
+import { WeeklyHeatmap } from './components/WeeklyHeatmap'; 
 
 // 引入外部數據檔
 import { PLAYER_PHONE_BOOK } from './data/playerData';
@@ -30,15 +31,15 @@ export default function App() {
   });
   
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'events' | 'summary' | 'hosts' | 'settings'>('events');
+  
+  // ★ 狀態更新：加入 'calendar' 標籤
+  const [activeTab, setActiveTab] = useState<'events' | 'summary' | 'calendar' | 'hosts' | 'settings'>('events');
   const [isLoaded, setIsLoaded] = useState(false);
   
-  // 雲端聯絡簿狀態
   const [cloudContacts, setCloudContacts] = useState<Contact[]>([]);
   const USER_ID = 'Owen_User_001'; 
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
-  // 抓取雲端聯絡人
   const fetchCloudContacts = async () => {
     const { data, error } = await supabase
       .from('contacts')
@@ -48,15 +49,12 @@ export default function App() {
     if (!error && data) setCloudContacts(data);
   };
 
-  // --- ★ 啟動畫面移除邏輯 ---
   useEffect(() => {
     if (isLoaded) {
       const splash = document.getElementById('splash-screen');
       if (splash) {
-        // 給予 500ms 緩衝，讓使用者看清楚 Logo 後再優雅淡出
         const timer = setTimeout(() => {
           splash.classList.add('splash-hidden');
-          // 動畫結束後徹底從 DOM 移除，釋放資源
           setTimeout(() => splash.remove(), 500);
         }, 500);
         return () => clearTimeout(timer);
@@ -64,7 +62,6 @@ export default function App() {
     }
   }, [isLoaded]);
 
-  // 初始載入與數據同步
   useEffect(() => {
     const loadCloudData = async () => {
       try {
@@ -78,7 +75,6 @@ export default function App() {
       } catch (e) { 
         console.error('SYNC ERROR:', e); 
       } finally { 
-        // 同步完成，這會觸發上面的 Splash Screen 移除邏輯
         setIsLoaded(true); 
       }
     };
@@ -114,10 +110,8 @@ export default function App() {
     setCurrentEventId(newId);
   };
 
-  // 如果還沒載入完成，我們回傳 null，讓 index.html 裡的 Splash Screen 繼續顯示
   if (!isLoaded) return null;
 
-  // --- 活動工作區渲染 ---
   if (currentEventId) {
     const event = store.events.find(e => e.id === currentEventId);
     if (!event) return null;
@@ -153,7 +147,23 @@ export default function App() {
       </header>
 
       <main className="max-w-3xl mx-auto p-4">
-        {activeTab === 'events' && <EventList events={store.events} onSelectEvent={setCurrentEventId} onCreateEvent={handleCreateEvent} />}
+        {/* ★ 首頁：現在只有純淨的活動列表 */}
+        {activeTab === 'events' && (
+          <div className="space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <EventList 
+              events={store.events} 
+              onSelectEvent={setCurrentEventId} 
+              onCreateEvent={handleCreateEvent} 
+            />
+          </div>
+        )}
+
+        {/* ★ 全新頁面：最受歡迎時段 (Calendar) */}
+        {activeTab === 'calendar' && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <WeeklyHeatmap events={store.events} />
+          </div>
+        )}
 
         {activeTab === 'summary' && (
           <Ledger events={store.events} paidStatus={store.paidStatus} onTogglePaid={handleTogglePaid} />
@@ -183,11 +193,24 @@ export default function App() {
         )}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-200 px-6 py-3 z-40 shadow-2xl">
-        <div className="max-w-3xl mx-auto flex justify-around items-center">
-          <button onClick={() => setActiveTab('events')} className={`flex flex-col items-center gap-1 ${activeTab === 'events' ? 'text-blue-700' : 'text-slate-400'}`}><List size={24} /><span className="text-[10px] font-black uppercase">Events</span></button>
-          <button onClick={() => setActiveTab('summary')} className={`flex flex-col items-center gap-1 ${activeTab === 'summary' ? 'text-blue-700' : 'text-slate-400'}`}><Receipt size={24} /><span className="text-[10px] font-black uppercase">Billing</span></button>
-          <button onClick={() => setActiveTab('hosts')} className={`flex flex-col items-center gap-1 ${activeTab === 'hosts' ? 'text-blue-700' : 'text-slate-400'}`}><Crown size={24} /><span className="text-[10px] font-black uppercase">Host</span></button>
+      {/* ★ 底部導航：新增 Calendar 按鈕 */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-200 px-4 py-3 z-40 shadow-2xl">
+        <div className="max-w-3xl mx-auto flex justify-between items-center px-2">
+          <button onClick={() => setActiveTab('events')} className={`flex flex-col items-center gap-1 w-16 ${activeTab === 'events' ? 'text-blue-700' : 'text-slate-400'}`}>
+            <List size={24} /><span className="text-[10px] font-black uppercase">Events</span>
+          </button>
+          
+          <button onClick={() => setActiveTab('summary')} className={`flex flex-col items-center gap-1 w-16 ${activeTab === 'summary' ? 'text-blue-700' : 'text-slate-400'}`}>
+            <Receipt size={24} /><span className="text-[10px] font-black uppercase">Billing</span>
+          </button>
+          
+          <button onClick={() => setActiveTab('calendar')} className={`flex flex-col items-center gap-1 w-16 ${activeTab === 'calendar' ? 'text-blue-700' : 'text-slate-400'}`}>
+            <CalendarIcon size={24} /><span className="text-[10px] font-black uppercase">Calendar</span>
+          </button>
+
+          <button onClick={() => setActiveTab('hosts')} className={`flex flex-col items-center gap-1 w-16 ${activeTab === 'hosts' ? 'text-blue-700' : 'text-slate-400'}`}>
+            <Crown size={24} /><span className="text-[10px] font-black uppercase">Host</span>
+          </button>
         </div>
       </nav>
     </div>
