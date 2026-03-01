@@ -1,163 +1,267 @@
-import React, { useState } from 'react';
-import { CheckCircle2, TrendingUp, Users, Search } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { EventData } from '../types';
+import { Receipt, CheckCircle2, Check, ArrowLeft, ChevronRight, AlertCircle, Calendar as CalendarIcon } from 'lucide-react';
 
-interface LedgerProps {
-  events: any[];
+interface Props {
+  events: EventData[];
   paidStatus: { [key: string]: boolean };
-  onTogglePaid: (name: string) => void;
+  onTogglePaid: (key: string) => void;
 }
 
-export function Ledger({ events, paidStatus, onTogglePaid }: LedgerProps) {
-  const [searchQuery, setSearchQuery] = useState("");
+export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) => {
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
-  // --- 核心邏輯修正：改為全局收支統計 ---
-  const playerBalances: { [name: string]: number } = {};
+  // 1. 核心引擎：預先計算所有活動的帳目明細
+  const eventDebts = useMemo(() => {
+    const debtsByEvent: { [eventId: string]: any[] } = {};
 
-  events.forEach(event => {
-    // 建立一個 ID 到 Name 的映射表，方便快速查找
-    const idToName: { [id: string]: string } = {};
-    event.players.forEach((p: any) => { idToName[p.id] = p.name; });
+    events.forEach(event => {
+      if (!event.sessions || !event.players) return;
 
-    event.sessions.forEach((session: any) => {
-      // 1. 處理代付 (Credits)
-      if (session.hostId) {
-        // 如果在球員名單找不到 ID，代表 hostId 本身就是雲端聯絡人的名字 (例如 Carol)
-        const hostName = idToName[session.hostId] || session.hostId;
-        playerBalances[hostName] = (playerBalances[hostName] || 0) + session.cost;
-      }
+      const balances: { [playerId: string]: number } = {};
+      event.players.forEach(p => { balances[p.id] = 0; });
 
-      // 2. 處理支出 (Debits)
-      const participants = event.players.filter((p: any) => 
-        (event.participation?.[`${session.id}_${p.id}`] || 0) > 0
-      );
-      const totalWeight = participants.reduce((sum: number, p: any) => 
-        sum + (event.participation?.[`${session.id}_${p.id}`] || 0), 0
-      );
+      // 計算代墊 (Host)
+      event.sessions.forEach(session => {
+        if (session.hostId) {
+          let targetId = session.hostId;
+          const playerByName = event.players.find(p => p.name === session.hostId || p.id === session.hostId);
+          if (playerByName) targetId = playerByName.id;
+          if (balances[targetId] === undefined) balances[targetId] = 0;
+          balances[targetId] += session.cost;
+        }
+      });
 
-      if (totalWeight > 0) {
-        const unitCost = session.cost / totalWeight;
-        participants.forEach((p: any) => {
-          const weight = event.participation?.[`${session.id}_${p.id}`] || 0;
-          const playerName = p.name;
-          playerBalances[playerName] = (playerBalances[playerName] || 0) - (unitCost * weight);
+      // 計算應付分攤
+      event.sessions.forEach(session => {
+        const participants = event.players.filter(p => (event.participation?.[`${session.id}_${p.id}`] || 0) > 0);
+        const totalWeight = participants.reduce((sum, p) => sum + (event.participation?.[`${session.id}_${p.id}`] || 0), 0);
+        if (totalWeight > 0) {
+          const unitCost = session.cost / totalWeight;
+          participants.forEach(p => {
+            const weight = event.participation?.[`${session.id}_${p.id}`] || 0;
+            balances[p.id] -= unitCost * weight;
+          });
+        }
+      });
+
+      const debtors: { id: string; amount: number }[] = [];
+      const creditors: { id: string; amount: number }[] = [];
+      Object.entries(balances).forEach(([id, balance]) => {
+        if (balance < -0.1) debtors.push({ id, amount: Math.abs(balance) });
+        else if (balance > 0.1) creditors.push({ id, amount: balance });
+      });
+
+      debtors.sort((a, b) => b.amount - a.amount);
+      creditors.sort((a, b) => b.amount - a.amount);
+
+      const tempDebtors = JSON.parse(JSON.stringify(debtors));
+      const tempCreditors = JSON.parse(JSON.stringify(creditors));
+      let dIdx = 0, cIdx = 0;
+      const transactions = [];
+
+      while (dIdx < tempDebtors.length && cIdx < tempCreditors.length) {
+        const d = tempDebtors[dIdx], c = tempCreditors[cIdx];
+        const settleAmount = Math.min(d.amount, c.amount);
+
+        const fromPlayer = event.players.find(p => p.id === d.id);
+        const toPlayer = event.players.find(p => p.id === c.id);
+
+        transactions.push({
+          fromId: d.id,
+          toId: c.id,
+          fromName: fromPlayer ? fromPlayer.name : d.id,
+          toName: toPlayer ? toPlayer.name : c.id,
+          amount: settleAmount,
+          uniqueKey: `${event.id}_${d.id}_${c.id}` // 保留與之前相同的 Key，不遺失打勾紀錄
         });
+
+        d.amount -= settleAmount;
+        c.amount -= settleAmount;
+        if (d.amount < 0.1) dIdx++;
+        if (c.amount < 0.1) cIdx++;
       }
-    });
-  });
 
-  // 轉換為陣列並過濾搜尋
-  const allPlayers = Object.entries(playerBalances)
-    .map(([name, amount]) => ({
-      name,
-      amount,
-      isPaid: paidStatus[name] || false
-    }))
-    .filter(p => Math.abs(p.amount) > 0.1) // 只顯示有帳務紀錄的人
-    .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    // 排序邏輯：未付清的排前面，債權人(正數)排最前
-    .sort((a, b) => {
-      if (a.isPaid !== b.isPaid) return a.isPaid ? 1 : -1;
-      return b.amount - a.amount;
+      debtsByEvent[event.id] = transactions;
     });
 
-  // 防止 NaN 的計算
-  const totalUnpaid = allPlayers
-    .filter(p => !p.isPaid && p.amount < 0)
-    .reduce((sum, p) => sum + Math.abs(p.amount), 0);
+    return debtsByEvent;
+  }, [events]);
+
+  // ==========================================
+  // 視圖 2：單一活動的欠款明細 (點擊進入後)
+  // ==========================================
+  if (selectedEventId) {
+    const event = events.find(e => e.id === selectedEventId);
+    if (!event) return null;
+
+    const debts = eventDebts[selectedEventId] || [];
     
-  const paidCount = allPlayers.filter(p => p.isPaid || p.amount >= 0).length;
-  const progressPercent = allPlayers.length > 0 ? (paidCount / allPlayers.length) * 100 : 0;
+    // 將該場活動的欠款以「欠款人」分組
+    const groupedDebts: { [name: string]: any[] } = {};
+    debts.forEach(debt => {
+      if (!groupedDebts[debt.fromName]) groupedDebts[debt.fromName] = [];
+      groupedDebts[debt.fromName].push(debt);
+    });
 
-  return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
-      {/* 頂部：收款進度總覽 */}
-      <section className="bg-blue-600 rounded-[2.5rem] p-6 text-white shadow-xl shadow-blue-100">
-        <div className="flex justify-between items-start mb-6">
+    const debtorNames = Object.keys(groupedDebts).sort();
+
+    return (
+      <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300 mb-8 mt-2">
+        {/* 返回按鈕與標題 */}
+        <div className="sticky top-20 z-40 -mx-4 px-4 py-3 bg-[#f8fafc]/90 backdrop-blur-md border-b border-slate-100 flex items-center gap-3 mb-2">
+          <button 
+            onClick={() => setSelectedEventId(null)} 
+            className="flex items-center gap-1 text-slate-500 hover:text-blue-700 font-black transition-colors active:scale-95"
+          >
+            <ArrowLeft size={20} />
+          </button>
           <div>
-            <h3 className="font-black text-2xl tracking-tighter">帳目總覽</h3>
-            <p className="text-blue-100 text-[10px] font-bold uppercase tracking-widest">Financial Overview</p>
-          </div>
-          <TrendingUp size={24} className="opacity-40" />
-        </div>
-        
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-white/10 rounded-3xl p-4 border border-white/10 backdrop-blur-md">
-            <span className="text-[9px] font-black text-blue-100 uppercase block mb-1">待收總額</span>
-            <span className="text-2xl font-black">${totalUnpaid.toFixed(1)}</span>
-          </div>
-          <div className="bg-white/10 rounded-3xl p-4 border border-white/10 backdrop-blur-md">
-            <span className="text-[9px] font-black text-blue-100 uppercase block mb-1">收款進度</span>
-            <span className="text-2xl font-black">{progressPercent.toFixed(0)}%</span>
+            <h2 className="text-lg font-black text-blue-900 leading-tight">{event.eventName}</h2>
+            <p className="text-xs font-bold text-slate-400">{event.date} 的結算明細</p>
           </div>
         </div>
-      </section>
 
-      {/* 搜尋列 */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-        <input 
-          type="text" 
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="搜尋姓名 (球員或 Host)..." 
-          className="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-12 pr-4 text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-        />
-      </div>
-
-      {/* 清單顯示區 */}
-      <div className="space-y-2">
-        <div className="px-3 flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
-          <span>姓名</span>
-          <span>結餘 / 狀態</span>
-        </div>
-        
-        {allPlayers.length === 0 ? (
-          <div className="py-20 text-center bg-white rounded-[2rem] border border-dashed border-slate-200">
-            <Users size={40} className="mx-auto text-slate-200 mb-2" />
-            <p className="text-slate-400 font-bold">目前沒有帳務數據</p>
+        {debtorNames.length === 0 ? (
+          <div className="py-20 text-center">
+            <CheckCircle2 size={64} className="mx-auto text-emerald-300 mb-4 opacity-50" />
+            <h2 className="text-xl font-black text-slate-400">本場活動帳目已清</h2>
+            <p className="text-sm font-bold text-slate-300 mt-2">無需任何轉帳操作</p>
           </div>
         ) : (
-          allPlayers.map((player) => (
-            <button
-              key={player.name}
-              onClick={() => onTogglePaid(player.name)}
-              className={`w-full flex items-center justify-between p-4 rounded-[1.8rem] border transition-all active:scale-[0.98] ${
-                player.isPaid 
-                  ? 'bg-emerald-50/20 border-emerald-100 opacity-60' 
-                  : 'bg-white border-slate-100 shadow-sm hover:border-blue-200'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-2xl ${player.isPaid ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                  <Users size={20} />
+          <div className="space-y-4">
+            {debtorNames.map(debtorName => {
+              const personDebts = groupedDebts[debtorName];
+              const totalUnpaid = personDebts.filter(d => !paidStatus[d.uniqueKey]).reduce((sum, d) => sum + d.amount, 0);
+              const isAllPaid = totalUnpaid === 0;
+
+              return (
+                <div key={debtorName} className={`bg-white rounded-[2rem] p-5 border shadow-sm transition-all duration-300 ${isAllPaid ? 'border-emerald-100 opacity-70' : 'border-slate-200'}`}>
+                  <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+                    <h3 className="font-black text-xl text-slate-700">{debtorName}</h3>
+                    {isAllPaid ? (
+                      <span className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1">
+                        <Check size={12} /> 已結清
+                      </span>
+                    ) : (
+                      <div className="text-right">
+                        <span className="text-[10px] font-black text-red-400 uppercase block mb-0.5">待付總額</span>
+                        <span className="text-xl font-black text-red-500 tracking-tighter">${totalUnpaid.toFixed(1)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    {personDebts.map(debt => {
+                      const isPaid = paidStatus[debt.uniqueKey];
+                      return (
+                        <div 
+                          key={debt.uniqueKey} 
+                          onClick={() => onTogglePaid(debt.uniqueKey)} 
+                          className={`flex justify-between items-center p-3.5 rounded-2xl cursor-pointer transition-all border active:scale-[0.98] ${
+                            isPaid 
+                              ? 'bg-slate-50 border-slate-100' 
+                              : 'bg-blue-50/50 border-blue-100 hover:bg-blue-50 hover:border-blue-200'
+                          }`}
+                        >
+                          <span className={`font-black text-sm flex items-center gap-1.5 ${isPaid ? 'text-slate-400 line-through decoration-slate-300' : 'text-blue-900'}`}>
+                            支付給 {debt.toName}
+                            <span className={`${isPaid ? 'text-slate-400' : 'text-blue-600'}`}>${debt.amount.toFixed(1)}</span>
+                          </span>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                            isPaid ? 'bg-emerald-500 text-white shadow-inner' : 'border-2 border-blue-200 bg-white'
+                          }`}>
+                            {isPaid && <Check size={14} strokeWidth={4} />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="text-left">
-                  <span className={`font-black block text-sm ${player.isPaid ? 'text-slate-500' : 'text-blue-900'}`}>
-                    {player.name}
-                  </span>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase">
-                    {player.amount >= 0 ? 'Creditor' : 'Debtor'}
-                  </span>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ==========================================
+  // 視圖 1：活動列表 (首頁狀態)
+  // ==========================================
+  if (events.length === 0) {
+    return (
+      <div className="py-20 text-center animate-in fade-in zoom-in duration-300">
+        <Receipt size={64} className="mx-auto text-slate-300 mb-4 opacity-50" />
+        <h2 className="text-xl font-black text-slate-400">尚無活動紀錄</h2>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500 mb-8 mt-2">
+      <div className="bg-gradient-to-r from-blue-700 to-blue-600 p-6 rounded-[2rem] text-white shadow-sm flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black flex items-center gap-2">
+            <Receipt size={24} /> 活動結算
+          </h2>
+          <p className="text-[10px] font-bold text-blue-200 mt-1 uppercase tracking-widest">Billing History</p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {events.map(event => {
+          const debts = eventDebts[event.id] || [];
+          const totalTransactions = debts.length;
+          const unpaidTransactions = debts.filter(d => !paidStatus[d.uniqueKey]).length;
+          
+          // 解析日期用於顯示
+          const dateMatch = event.date.match(/(\d+)月\s*(\d+)日/);
+          const month = dateMatch ? dateMatch[1] : '';
+          const day = dateMatch ? dateMatch[2] : '';
+
+          return (
+            <div 
+              key={event.id}
+              onClick={() => setSelectedEventId(event.id)}
+              className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200 flex items-center gap-4 cursor-pointer active:scale-95 transition-all hover:border-blue-300 group"
+            >
+              {/* 左側日期卡片 */}
+              <div className="bg-slate-50 w-16 h-16 rounded-2xl flex flex-col items-center justify-center border border-slate-100 shrink-0 group-hover:bg-blue-50 transition-colors">
+                {month && day ? (
+                  <>
+                    <span className="text-[10px] font-black text-blue-500 uppercase">{month}月</span>
+                    <span className="text-xl font-black text-blue-900 leading-none mt-0.5">{day}</span>
+                  </>
+                ) : (
+                  <CalendarIcon size={24} className="text-blue-400" />
+                )}
+              </div>
+
+              {/* 中間活動資訊 */}
+              <div className="flex-1 min-w-0">
+                <h3 className="font-black text-slate-700 text-lg truncate group-hover:text-blue-800 transition-colors">{event.eventName}</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  {totalTransactions === 0 ? (
+                    <span className="text-xs font-bold text-slate-400">無需結算</span>
+                  ) : unpaidTransactions === 0 ? (
+                    <span className="text-[10px] font-black bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
+                      <Check size={10} /> 全部結清
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-black bg-red-100 text-red-500 px-2 py-0.5 rounded-full flex items-center gap-1 w-fit animate-pulse">
+                      <AlertCircle size={10} /> 剩餘 {unpaidTransactions} 筆未收
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <span className={`text-lg font-black block leading-none ${player.amount >= 0 ? 'text-emerald-500' : 'text-blue-900'}`}>
-                    {player.amount >= 0 ? '+' : '-'}${Math.abs(player.amount).toFixed(1)}
-                  </span>
-                </div>
-                
-                <div className={`flex items-center gap-1 px-3 py-1.5 rounded-xl font-black text-[9px] uppercase ${
-                  player.isPaid ? 'bg-emerald-500 text-white' : 'bg-amber-100 text-amber-600'
-                }`}>
-                  {player.isPaid ? 'Paid' : 'Unpaid'}
-                </div>
-              </div>
-            </button>
-          ))
-        )}
+              {/* 右側箭頭 */}
+              <ChevronRight size={20} className="text-slate-300 group-hover:text-blue-500 transition-colors shrink-0" />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
-}
+};
