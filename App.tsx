@@ -203,7 +203,7 @@ export default function App() {
                   </div>
                   {!isSecretUnlocked ? (
                     <button onClick={() => {
-                      const pwd = prompt('請輸入暗箱模式密碼：');
+                      const pwd = prompt('請輸入密碼：');
                       if (pwd === '1020304050') setIsSecretUnlocked(true);
                       else if (pwd !== null) alert('密碼錯誤！');
                     }} className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-600 active:scale-95 transition-all">
