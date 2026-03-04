@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { EventData, Session } from '../types';
 import { MatrixGrid } from './MatrixGrid';
 import { SummaryCard } from './SummaryCard';
-import { ArrowLeft, Trash2, Clock, UserPlus, X, Check, ArrowUp } from 'lucide-react';
+import { ArrowLeft, Trash2, Clock, UserPlus, X, Check, ArrowUp, Users } from 'lucide-react';
+import { TeamGenerator } from './TeamGenerator';
 
 interface Props {
   event: EventData;
@@ -59,6 +60,7 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
   const [modalType, setModalType] = useState<'add-session' | 'add-player' | 'delete-session' | 'delete-player' | 'delete-event' | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [targetId, setTargetId] = useState<string | null>(null);
+  const [showTeamGenerator, setShowTeamGenerator] = useState(false);
 
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
@@ -164,14 +166,17 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
       </header>
 
       {/* 3. Action Buttons */}
-      <div className="grid grid-cols-2 gap-3">
-        <button onClick={() => setModalType('add-session')} className="flex items-center justify-center gap-2 p-4 bg-white border border-slate-200 rounded-2xl font-black text-blue-700 shadow-sm active:scale-95 transition-all">
-          <Clock size={18} /> 加時段
-        </button>
-        <button onClick={() => setModalType('add-player')} className="flex items-center justify-center gap-2 p-4 bg-white border border-slate-200 rounded-2xl font-black text-blue-700 shadow-sm active:scale-95 transition-all">
-          <UserPlus size={18} /> 加球員
-        </button>
-      </div>
+<div className="grid grid-cols-3 gap-3">
+  <button onClick={() => setModalType('add-session')} className="flex flex-col items-center justify-center gap-1.5 py-3 bg-white border border-slate-200 rounded-2xl font-black text-blue-700 shadow-sm active:scale-95 transition-all">
+    <Clock size={18} /> <span className="text-[10px] uppercase tracking-widest">加時段</span>
+  </button>
+  <button onClick={() => setModalType('add-player')} className="flex flex-col items-center justify-center gap-1.5 py-3 bg-white border border-slate-200 rounded-2xl font-black text-blue-700 shadow-sm active:scale-95 transition-all">
+    <UserPlus size={18} /> <span className="text-[10px] uppercase tracking-widest">加球員</span>
+  </button>
+  <button onClick={() => setShowTeamGenerator(true)} className="flex flex-col items-center justify-center gap-1.5 py-3 bg-gradient-to-br from-indigo-500 to-blue-600 border border-blue-400 rounded-2xl font-black text-white shadow-sm active:scale-95 transition-all">
+    <Users size={18} /> <span className="text-[10px] uppercase tracking-widest">智能分隊</span>
+  </button>
+</div>
 
       {/* 4. Matrix & Summary */}
       <MatrixGrid 
@@ -191,6 +196,13 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
         phoneBook={phoneBook} 
         cloudContacts={cloudContacts} 
       />
+
+       {showTeamGenerator && (
+  <TeamGenerator 
+    event={event} 
+    onClose={() => setShowTeamGenerator(false)} 
+  />
+)}
 
       {/* 5. 回頂部按鈕 */}
       <button

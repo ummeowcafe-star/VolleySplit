@@ -21,7 +21,6 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
       const balances: { [playerId: string]: number } = {};
       event.players.forEach(p => { balances[p.id] = 0; });
 
-      // 計算代墊 (Host)
       event.sessions.forEach(session => {
         if (session.hostId) {
           let targetId = session.hostId;
@@ -32,7 +31,6 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
         }
       });
 
-      // 計算應付分攤
       event.sessions.forEach(session => {
         const participants = event.players.filter(p => (event.participation?.[`${session.id}_${p.id}`] || 0) > 0);
         const totalWeight = participants.reduce((sum, p) => sum + (event.participation?.[`${session.id}_${p.id}`] || 0), 0);
@@ -73,7 +71,7 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
           fromName: fromPlayer ? fromPlayer.name : d.id,
           toName: toPlayer ? toPlayer.name : c.id,
           amount: settleAmount,
-          uniqueKey: `${event.id}_${d.id}_${c.id}` // 保留與之前相同的 Key，不遺失打勾紀錄
+          uniqueKey: `${event.id}_${d.id}_${c.id}`
         });
 
         d.amount -= settleAmount;
@@ -97,18 +95,36 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
 
     const debts = eventDebts[selectedEventId] || [];
     
-    // 將該場活動的欠款以「欠款人」分組
     const groupedDebts: { [name: string]: any[] } = {};
     debts.forEach(debt => {
       if (!groupedDebts[debt.fromName]) groupedDebts[debt.fromName] = [];
       groupedDebts[debt.fromName].push(debt);
     });
 
-    const debtorNames = Object.keys(groupedDebts).sort();
+    // ★ 核心優化：修復浮點數誤差，確保「未付款」絕對置頂
+    const debtorNames = Object.keys(groupedDebts).sort((a, b) => {
+      const unpaidA = groupedDebts[a].filter(d => !paidStatus[d.uniqueKey]).reduce((sum, d) => sum + d.amount, 0);
+      const unpaidB = groupedDebts[b].filter(d => !paidStatus[d.uniqueKey]).reduce((sum, d) => sum + d.amount, 0);
+
+      // 使用 0.1 作為容差值，避免浮點數 0.0000001 造成的誤判
+      const hasUnpaidA = unpaidA > 0.1;
+      const hasUnpaidB = unpaidB > 0.1;
+
+      // 規則 1：有欠款的排前面，已付清的排後面
+      if (hasUnpaidA && !hasUnpaidB) return -1;
+      if (!hasUnpaidA && hasUnpaidB) return 1;
+      
+      // 規則 2：都有欠款的話，欠比較多的排前面
+      if (hasUnpaidA && hasUnpaidB && Math.abs(unpaidA - unpaidB) > 0.1) {
+        return unpaidB - unpaidA; 
+      }
+      
+      // 規則 3：狀態一樣的話，照字母順序排
+      return a.localeCompare(b);
+    });
 
     return (
       <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300 mb-8 mt-2">
-        {/* 返回按鈕與標題 */}
         <div className="sticky top-20 z-40 -mx-4 px-4 py-3 bg-[#f8fafc]/90 backdrop-blur-md border-b border-slate-100 flex items-center gap-3 mb-2">
           <button 
             onClick={() => setSelectedEventId(null)} 
@@ -131,14 +147,21 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
         ) : (
           <div className="space-y-4">
             {debtorNames.map(debtorName => {
-              const personDebts = groupedDebts[debtorName];
+              // ★ 第二層優化：卡片內部的項目也是「未打勾」排在「已打勾」前面
+              const personDebts = [...groupedDebts[debtorName]].sort((a, b) => {
+                const paidA = paidStatus[a.uniqueKey] ? 1 : 0;
+                const paidB = paidStatus[b.uniqueKey] ? 1 : 0;
+                if (paidA !== paidB) return paidA - paidB; // 0 (未付) 排在 1 (已付) 前面
+                return b.amount - a.amount;
+              });
+
               const totalUnpaid = personDebts.filter(d => !paidStatus[d.uniqueKey]).reduce((sum, d) => sum + d.amount, 0);
-              const isAllPaid = totalUnpaid === 0;
+              const isAllPaid = totalUnpaid < 0.1;
 
               return (
-                <div key={debtorName} className={`bg-white rounded-[2rem] p-5 border shadow-sm transition-all duration-300 ${isAllPaid ? 'border-emerald-100 opacity-70' : 'border-slate-200'}`}>
+                <div key={debtorName} className={`bg-white rounded-[2rem] p-5 border shadow-sm transition-all duration-300 ${isAllPaid ? 'border-emerald-100 opacity-60 bg-slate-50' : 'border-slate-200'}`}>
                   <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
-                    <h3 className="font-black text-xl text-slate-700">{debtorName}</h3>
+                    <h3 className={`font-black text-xl ${isAllPaid ? 'text-slate-400' : 'text-slate-700'}`}>{debtorName}</h3>
                     {isAllPaid ? (
                       <span className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1">
                         <Check size={12} /> 已結清
@@ -160,7 +183,7 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
                           onClick={() => onTogglePaid(debt.uniqueKey)} 
                           className={`flex justify-between items-center p-3.5 rounded-2xl cursor-pointer transition-all border active:scale-[0.98] ${
                             isPaid 
-                              ? 'bg-slate-50 border-slate-100' 
+                              ? 'bg-slate-50 border-slate-100 opacity-70' 
                               : 'bg-blue-50/50 border-blue-100 hover:bg-blue-50 hover:border-blue-200'
                           }`}
                         >
@@ -213,9 +236,10 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
         {events.map(event => {
           const debts = eventDebts[event.id] || [];
           const totalTransactions = debts.length;
+          
+          // 修正浮點數誤差，只計算尚未結清的交易數量
           const unpaidTransactions = debts.filter(d => !paidStatus[d.uniqueKey]).length;
           
-          // 解析日期用於顯示
           const dateMatch = event.date.match(/(\d+)月\s*(\d+)日/);
           const month = dateMatch ? dateMatch[1] : '';
           const day = dateMatch ? dateMatch[2] : '';
@@ -226,7 +250,6 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
               onClick={() => setSelectedEventId(event.id)}
               className="bg-white p-4 rounded-3xl shadow-sm border border-slate-200 flex items-center gap-4 cursor-pointer active:scale-95 transition-all hover:border-blue-300 group"
             >
-              {/* 左側日期卡片 */}
               <div className="bg-slate-50 w-16 h-16 rounded-2xl flex flex-col items-center justify-center border border-slate-100 shrink-0 group-hover:bg-blue-50 transition-colors">
                 {month && day ? (
                   <>
@@ -238,7 +261,6 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
                 )}
               </div>
 
-              {/* 中間活動資訊 */}
               <div className="flex-1 min-w-0">
                 <h3 className="font-black text-slate-700 text-lg truncate group-hover:text-blue-800 transition-colors">{event.eventName}</h3>
                 <div className="flex items-center gap-2 mt-1">
@@ -256,7 +278,6 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
                 </div>
               </div>
 
-              {/* 右側箭頭 */}
               <ChevronRight size={20} className="text-slate-300 group-hover:text-blue-500 transition-colors shrink-0" />
             </div>
           );

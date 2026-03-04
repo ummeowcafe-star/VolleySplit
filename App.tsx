@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, List, Receipt, User, Plus, Trash2, Save, Crown, Clock, UserPlus, Calendar as CalendarIcon } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Settings, List, Receipt, Save, Crown, Clock, UserPlus, Calendar as CalendarIcon, ShieldCheck, Lock, Unlock } from 'lucide-react';
 import { EventWorkspace } from './components/EventWorkspace';
 import { EventList } from './components/EventList';
 import { Ledger } from './components/Ledger';
@@ -31,14 +31,26 @@ export default function App() {
   });
   
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
-  
-  // ★ 狀態更新：加入 'calendar' 標籤
   const [activeTab, setActiveTab] = useState<'events' | 'summary' | 'calendar' | 'hosts' | 'settings'>('events');
   const [isLoaded, setIsLoaded] = useState(false);
   
   const [cloudContacts, setCloudContacts] = useState<Contact[]>([]);
   const USER_ID = 'Owen_User_001'; 
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+
+  // ★ 新增：暗箱模式狀態與實力本機儲存
+  const [isSecretUnlocked, setIsSecretUnlocked] = useState(false);
+  const [skillBook, setSkillBook] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('volley_skill_book');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // ★ 統合曾經出現過的所有球員名單 (用於暗箱編輯)
+  const allUniquePlayers = useMemo(() => {
+    const names = new Set(store.defaults.playerNames);
+    store.events.forEach(e => e.players.forEach(p => names.add(p.name)));
+    return Array.from(names).sort();
+  }, [store.events, store.defaults.playerNames]);
 
   const fetchCloudContacts = async () => {
     const { data, error } = await supabase
@@ -147,18 +159,12 @@ export default function App() {
       </header>
 
       <main className="max-w-3xl mx-auto p-4">
-        {/* ★ 首頁：現在只有純淨的活動列表 */}
         {activeTab === 'events' && (
           <div className="space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <EventList 
-              events={store.events} 
-              onSelectEvent={setCurrentEventId} 
-              onCreateEvent={handleCreateEvent} 
-            />
+            <EventList events={store.events} onSelectEvent={setCurrentEventId} onCreateEvent={handleCreateEvent} />
           </div>
         )}
 
-        {/* ★ 全新頁面：最受歡迎時段 (Calendar) */}
         {activeTab === 'calendar' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <WeeklyHeatmap events={store.events} />
@@ -170,11 +176,7 @@ export default function App() {
         )}
 
         {activeTab === 'hosts' && (
-          <ContactManager 
-            contacts={cloudContacts} 
-            onRefresh={fetchCloudContacts} 
-            userId={USER_ID} 
-          />
+          <ContactManager contacts={cloudContacts} onRefresh={fetchCloudContacts} userId={USER_ID} />
         )}
 
         {activeTab === 'settings' && (
@@ -188,12 +190,71 @@ export default function App() {
                   className="w-full bg-slate-50 mt-2 p-3 rounded-xl font-black text-blue-900 outline-none"
                 />
              </section>
+
+             {/* ★ 密碼保護的暗箱模式 */}
+             <section className="bg-white rounded-[2rem] border border-slate-200 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <span className="font-black text-slate-700 text-sm flex items-center gap-2">
+                      <ShieldCheck size={18} className="text-amber-500" />
+                      進階模式
+                    </span>
+                    <p className="text-[10px] text-slate-400 font-bold mt-1"></p>
+                  </div>
+                  {!isSecretUnlocked ? (
+                    <button onClick={() => {
+                      const pwd = prompt('請輸入暗箱模式密碼：');
+                      if (pwd === '1020304050') setIsSecretUnlocked(true);
+                      else if (pwd !== null) alert('密碼錯誤！');
+                    }} className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-600 active:scale-95 transition-all">
+                      <Lock size={18} />
+                    </button>
+                  ) : (
+                    <button onClick={() => setIsSecretUnlocked(false)} className="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-amber-600 active:scale-95 transition-all">
+                      <Unlock size={18} />
+                    </button>
+                  )}
+                </div>
+
+                {isSecretUnlocked && (
+                  <div className="space-y-2 mt-4 pt-4 border-t border-slate-100 max-h-[400px] overflow-y-auto pr-2">
+                    {allUniquePlayers.map(name => {
+                      const currentLvl = skillBook[name] || 2;
+                      return (
+                        <div key={name} className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                          <span className="font-black text-slate-700">{name}</span>
+                          <div className="flex bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm shrink-0">
+                            {[1, 2, 3].map(level => (
+                              <button
+                                key={level}
+                                onClick={() => {
+                                  const newBook = { ...skillBook, [name]: level };
+                                  setSkillBook(newBook);
+                                  localStorage.setItem('volley_skill_book', JSON.stringify(newBook));
+                                }}
+                                className={`px-3 py-1.5 text-xs font-black transition-colors ${
+                                  currentLvl === level 
+                                    ? level === 3 ? 'bg-red-500 text-white' : level === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'
+                                    : 'text-slate-400 hover:bg-slate-200'
+                                }`}
+                              >
+                                {level === 3 ? 'S' : level === 2 ? 'A' : 'B'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+             </section>
+
              <button onClick={() => setActiveTab('events')} className="w-full bg-blue-700 text-white font-black py-5 rounded-[1.5rem] shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all"><Save size={24} /> 保存並返回</button>
           </div>
         )}
       </main>
 
-      {/* ★ 底部導航：新增 Calendar 按鈕 */}
+      {/* ★ 剛才不小心被刪掉的底部導航列在這裡！ */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-200 px-4 py-3 z-40 shadow-2xl">
         <div className="max-w-3xl mx-auto flex justify-between items-center px-2">
           <button onClick={() => setActiveTab('events')} className={`flex flex-col items-center gap-1 w-16 ${activeTab === 'events' ? 'text-blue-700' : 'text-slate-400'}`}>
