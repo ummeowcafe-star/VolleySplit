@@ -108,14 +108,32 @@ export default function App() {
     setStore(prev => ({ ...prev, events: prev.events.map(e => e.id === updatedEvent.id ? updatedEvent : e) }));
   };
 
-  const handleCreateEvent = (data: { name: string, date: string, copyRoster: boolean }) => {
+  // ★ 修改：接收 startTime 與 endTime，並自動迴圈切分時段
+  const handleCreateEvent = (data: { name: string, date: string, copyRoster: boolean, startTime: string, endTime: string }) => {
     const newId = generateId();
+    
+    // 計算並生成自動時段 (例如 16:00 -> 19:00 會生成三個 1 小時的 session)
+    const startHour = parseInt(data.startTime.split(':')[0], 10);
+    const endHour = parseInt(data.endTime.split(':')[0], 10);
+    const autoSessions = [];
+    
+    for (let i = startHour; i < endHour; i++) {
+      const sessionName = `${i.toString().padStart(2, '0')}:00 - ${(i + 1).toString().padStart(2, '0')}:00`;
+      autoSessions.push({
+        id: generateId(),
+        name: sessionName,
+        cost: store.defaults.cost,
+        hostId: 'Carol' // 預設代墊人 Carol
+      });
+    }
+
     const newEvent: EventData = {
-      id: newId, date: data.date, eventName: data.name, defaultCost: store.defaults.cost,
-      // ★ 修改 1：如果不複製上一場名單，預設給予空陣列 [] (不再帶入預設大名單)
+      id: newId, 
+      date: data.date, 
+      eventName: data.name, 
+      defaultCost: store.defaults.cost,
       players: data.copyRoster && store.events.length > 0 ? [...store.events[0].players] : [],
-      // ★ 修改 2：創建時段時，直接將 hostId 指定為 'Carol'
-      sessions: store.defaults.sessionNames.map(name => ({ id: generateId(), name, cost: store.defaults.cost, hostId: 'Carol' })),
+      sessions: autoSessions, // ★ 帶入自動生成的時段陣列
       participation: {}
     };
     setStore(prev => ({ ...prev, events: [newEvent, ...prev.events] }));
