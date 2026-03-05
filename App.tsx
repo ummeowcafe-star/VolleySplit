@@ -38,14 +38,12 @@ export default function App() {
   const USER_ID = 'Owen_User_001'; 
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
-  // ★ 新增：暗箱模式狀態與實力本機儲存
   const [isSecretUnlocked, setIsSecretUnlocked] = useState(false);
   const [skillBook, setSkillBook] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem('volley_skill_book');
     return saved ? JSON.parse(saved) : {};
   });
 
-  // ★ 統合曾經出現過的所有球員名單 (用於暗箱編輯)
   const allUniquePlayers = useMemo(() => {
     const names = new Set(store.defaults.playerNames);
     store.events.forEach(e => e.players.forEach(p => names.add(p.name)));
@@ -114,8 +112,10 @@ export default function App() {
     const newId = generateId();
     const newEvent: EventData = {
       id: newId, date: data.date, eventName: data.name, defaultCost: store.defaults.cost,
-      players: data.copyRoster && store.events.length > 0 ? [...store.events[0].players] : store.defaults.playerNames.map(name => ({ id: generateId(), name })),
-      sessions: store.defaults.sessionNames.map(name => ({ id: generateId(), name, cost: store.defaults.cost })),
+      // ★ 修改 1：如果不複製上一場名單，預設給予空陣列 [] (不再帶入預設大名單)
+      players: data.copyRoster && store.events.length > 0 ? [...store.events[0].players] : [],
+      // ★ 修改 2：創建時段時，直接將 hostId 指定為 'Carol'
+      sessions: store.defaults.sessionNames.map(name => ({ id: generateId(), name, cost: store.defaults.cost, hostId: 'Carol' })),
       participation: {}
     };
     setStore(prev => ({ ...prev, events: [newEvent, ...prev.events] }));
@@ -191,19 +191,18 @@ export default function App() {
                 />
              </section>
 
-             {/* ★ 密碼保護的暗箱模式 */}
              <section className="bg-white rounded-[2rem] border border-slate-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <span className="font-black text-slate-700 text-sm flex items-center gap-2">
                       <ShieldCheck size={18} className="text-amber-500" />
-                      進階模式
+                      進階模式 (實力設定)
                     </span>
-                    <p className="text-[10px] text-slate-400 font-bold mt-1"></p>
+                    <p className="text-[10px] text-slate-400 font-bold mt-1">此數據僅存於本機，用於分隊平衡</p>
                   </div>
                   {!isSecretUnlocked ? (
                     <button onClick={() => {
-                      const pwd = prompt('請輸入密碼：');
+                      const pwd = prompt('請輸入進階模式密碼：');
                       if (pwd === '1020304050') setIsSecretUnlocked(true);
                       else if (pwd !== null) alert('密碼錯誤！');
                     }} className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-600 active:scale-95 transition-all">
@@ -254,7 +253,6 @@ export default function App() {
         )}
       </main>
 
-      {/* ★ 剛才不小心被刪掉的底部導航列在這裡！ */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-200 px-4 py-3 z-40 shadow-2xl">
         <div className="max-w-3xl mx-auto flex justify-between items-center px-2">
           <button onClick={() => setActiveTab('events')} className={`flex flex-col items-center gap-1 w-16 ${activeTab === 'events' ? 'text-blue-700' : 'text-slate-400'}`}>
