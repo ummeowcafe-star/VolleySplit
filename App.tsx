@@ -214,7 +214,7 @@ export default function App() {
                   <div>
                     <span className="font-black text-slate-700 text-sm flex items-center gap-2">
                       <ShieldCheck size={18} className="text-amber-500" />
-                      進階模式 (實力設定)
+                      進階模式
                     </span>
                     <p className="text-[10px] text-slate-400 font-bold mt-1">此數據僅存於本機，用於分隊平衡</p>
                   </div>
