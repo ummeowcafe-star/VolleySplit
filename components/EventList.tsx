@@ -11,7 +11,8 @@ interface Event {
 interface EventListProps {
   events: Event[];
   onSelectEvent: (id: string) => void;
-  onCreateEvent: (data: { name: string, date: string, copyRoster: boolean, startTime: string, endTime: string, rawRoster: string }) => void;
+  // ★ 移除了 copyRoster
+  onCreateEvent: (data: { name: string, date: string, startTime: string, endTime: string, rawRoster: string }) => void;
 }
 
 export function EventList({ events, onSelectEvent, onCreateEvent }: EventListProps) {
@@ -19,7 +20,6 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     name: '',
-    copyRoster: true,
     startTime: '16:00',
     endTime: '17:00',
     rawRoster: '' 
@@ -32,7 +32,6 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
     setFormData({
       date: today,
       name: `Volleyball ${today}`,
-      copyRoster: events.length > 0,
       startTime: '16:00',
       endTime: '17:00',
       rawRoster: '' 
@@ -48,59 +47,53 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
     setFormData(prev => ({ ...prev, startTime: newStartTime, endTime: newEndTime }));
   };
 
-  // ★ 核心魔法：智能解析貼上的接龍文字 (取消場地抓取，保留純淨日期與時間)
-  const handleRawRosterChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const text = e.target.value;
-    let newDate = formData.date;
-    let newStartTime = formData.startTime;
-    let newEndTime = formData.endTime;
-    let newName = formData.name;
-
-    const lines = text.split('\n').filter(l => l.trim() !== '');
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
     
-    if (lines.length > 0) {
-      // 假設第一行通常是標題 (例如: 🔵3.15（日）14:00-17:00望廈場2🔵)
-      const firstLine = lines[0];
+    // ★ 魔法移到這裡：只有在按下按鈕時，才進行解析
+    let finalDate = formData.date;
+    let finalStartTime = formData.startTime;
+    let finalEndTime = formData.endTime;
+    let finalName = formData.name;
 
-      // 1. 智能抓取時間 (例如 14:00-17:00 或 14:00~17:00)
-      const timeMatch = firstLine.match(/(\d{1,2}:\d{2})\s*(?:-|至|~)\s*(\d{1,2}:\d{2})/);
-      if (timeMatch) {
-        newStartTime = timeMatch[1].padStart(5, '0');
-        newEndTime = timeMatch[2].padStart(5, '0');
-      }
+    if (formData.rawRoster.trim() !== '') {
+      const lines = formData.rawRoster.split('\n').filter(l => l.trim() !== '');
+      if (lines.length > 0) {
+        const firstLine = lines[0];
+        
+        const timeMatch = firstLine.match(/(\d{1,2}:\d{2})\s*(?:-|至|~)\s*(\d{1,2}:\d{2})/);
+        if (timeMatch) {
+          finalStartTime = timeMatch[1].padStart(5, '0');
+          finalEndTime = timeMatch[2].padStart(5, '0');
+        }
 
-      // 2. 智能抓取日期 (例如 3.15 或 3/15 或 3月15)
-      const dateMatch = firstLine.match(/(\d{1,2})[\.\/月](\d{1,2})/);
-      if (dateMatch) {
-        const year = new Date().getFullYear(); // 預設為今年
-        const month = dateMatch[1].padStart(2, '0');
-        const day = dateMatch[2].padStart(2, '0');
-        newDate = `${year}-${month}-${day}`;
-        // ★ 直接將名稱預設為乾淨的日期格式，不抓取場地
-        newName = `Volleyball ${newDate}`;
+        const dateMatch = firstLine.match(/(\d{1,2})[\.\/月](\d{1,2})/);
+        if (dateMatch) {
+          const year = new Date().getFullYear();
+          const month = dateMatch[1].padStart(2, '0');
+          const day = dateMatch[2].padStart(2, '0');
+          finalDate = `${year}-${month}-${day}`;
+          finalName = `Volleyball ${finalDate}`;
+        }
       }
     }
 
-    // 立即更新表單讓使用者看到魔法
-    setFormData({
-      ...formData,
-      rawRoster: text,
-      date: newDate,
-      startTime: newStartTime,
-      endTime: newEndTime,
-      name: newName
-    });
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const sHour = parseInt(formData.startTime);
-    const eHour = parseInt(formData.endTime);
+    const sHour = parseInt(finalStartTime);
+    const eHour = parseInt(finalEndTime);
     if (eHour <= sHour) {
       alert("結束時間必須晚於開始時間喔！");
       return;
     }
-    onCreateEvent(formData);
+
+    // 將最終解析好的資料送給 App.tsx
+    onCreateEvent({
+      name: finalName,
+      date: finalDate,
+      startTime: finalStartTime,
+      endTime: finalEndTime,
+      rawRoster: formData.rawRoster
+    });
+    
     setIsModalOpen(false);
   };
 
@@ -175,12 +168,12 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
                   </label>
                   <textarea 
                     value={formData.rawRoster}
-                    onChange={handleRawRosterChange}
-                    placeholder="🔵1.1（日）14:00-17:00望廈場2🔵&#10;1. Carol🍓&#10;2. XXX "
+                    onChange={(e) => setFormData({...formData, rawRoster: e.target.value})} // ★ 現在只負責存字，不觸發解析
+                    placeholder="🔵1.1（日）14:00-17:00望廈場2🔵&#10;1. Carol🍓&#10;2. XXX"
                     className="w-full px-5 py-4 bg-emerald-50 border-2 border-emerald-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-slate-700 text-sm h-32 resize-none placeholder:text-emerald-300 shadow-inner transition-all"
                   />
                   <p className="text-[10px] font-bold text-emerald-500/80 ml-1 mt-1.5 flex items-center gap-1">
-                    <Sparkles size={10}/> 系統將自動解析日期與時段，過濾名單雜訊
+                    <Sparkles size={10}/> 點擊建立時，系統將自動解析日期與純淨名單
                   </p>
                 </div>
 
@@ -228,24 +221,9 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
                     />
                   </div>
                 </div>
+                
+                {/* 已經徹底移除「複製上次名單」的區塊 */}
 
-                {formData.rawRoster.trim() === '' && (
-                  <div className="pt-2 animate-in fade-in zoom-in duration-300">
-                    <label className="flex items-center gap-4 p-4 border border-slate-100 bg-slate-50/50 rounded-2xl cursor-pointer hover:bg-blue-50 transition-all group">
-                      <input 
-                        type="checkbox" 
-                        checked={formData.copyRoster} 
-                        onChange={(e) => setFormData({...formData, copyRoster: e.target.checked})} 
-                        disabled={events.length === 0} 
-                        className="w-6 h-6 text-blue-600 rounded-lg focus:ring-blue-600 border-slate-300" 
-                      />
-                      <div>
-                        <span className="block text-sm font-black text-slate-700 group-hover:text-blue-900">複製上次名單</span>
-                        <span className="block text-[10px] font-bold text-slate-400 uppercase">自動匯入上一場陣容</span>
-                      </div>
-                    </label>
-                  </div>
-                )}
               </form>
             </div>
 

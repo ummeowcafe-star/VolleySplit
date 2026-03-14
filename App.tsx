@@ -108,11 +108,11 @@ export default function App() {
     setStore(prev => ({ ...prev, events: prev.events.map(e => e.id === updatedEvent.id ? updatedEvent : e) }));
   };
 
-  // ★ 修改：接收 startTime 與 endTime，並自動迴圈切分時段
-  const handleCreateEvent = (data: { name: string, date: string, copyRoster: boolean, startTime: string, endTime: string }) => {
+  // ★ 升級版：包含自動切分時段與智能接龍解析 (已移除 copyRoster)
+  const handleCreateEvent = (data: { name: string, date: string, startTime: string, endTime: string, rawRoster: string }) => {
     const newId = generateId();
     
-    // 計算並生成自動時段 (例如 16:00 -> 19:00 會生成三個 1 小時的 session)
+    // 1. 自動切分時段
     const startHour = parseInt(data.startTime.split(':')[0], 10);
     const endHour = parseInt(data.endTime.split(':')[0], 10);
     const autoSessions = [];
@@ -127,15 +127,38 @@ export default function App() {
       });
     }
 
+    // 2. 智能解析微信接龍名單
+    let initialPlayers: Player[] = [];
+    
+    if (data.rawRoster && data.rawRoster.trim() !== '') {
+      const lines = data.rawRoster.split('\n');
+      
+      lines.forEach(line => {
+        let cleanName = line.replace(/^\s*\d+[\.、]\s*/, ''); // 移除開頭數字
+        cleanName = cleanName.replace(/[\(（\[【].*?[\)）\]】]/g, ''); // 移除括號與備註
+        cleanName = cleanName.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, ''); // 移除Emoji
+        cleanName = cleanName.trim();
+        
+        // 依序加入名單，保證 100% 貼上的順序
+        if (cleanName) {
+          // 防重複機制：如果名單還沒有這個人，才加進去
+          if (!initialPlayers.find(p => p.name === cleanName)) {
+            initialPlayers.push({ id: generateId(), name: cleanName });
+          }
+        }
+      });
+    }
+
     const newEvent: EventData = {
       id: newId, 
       date: data.date, 
       eventName: data.name, 
       defaultCost: store.defaults.cost,
-      players: data.copyRoster && store.events.length > 0 ? [...store.events[0].players] : [],
-      sessions: autoSessions, // ★ 帶入自動生成的時段陣列
+      players: initialPlayers, // 載入解析後的球員名單 (或是空名單)
+      sessions: autoSessions, // 載入自動生成的時段陣列
       participation: {}
     };
+    
     setStore(prev => ({ ...prev, events: [newEvent, ...prev.events] }));
     setCurrentEventId(newId);
   };
