@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronRight, Users, Plus, X, Calendar, FileText, Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronRight, Users, Plus, X, Calendar, FileText, Clock, MessageCircle, Sparkles } from 'lucide-react';
 
 interface Event {
   id: string;
@@ -11,12 +11,8 @@ interface Event {
 interface EventListProps {
   events: Event[];
   onSelectEvent: (id: string) => void;
-  // ★ 修改傳遞的資料格式，加入 startTime 和 endTime
-  onCreateEvent: (data: { name: string, date: string, copyRoster: boolean, startTime: string, endTime: string }) => void;
+  onCreateEvent: (data: { name: string, date: string, copyRoster: boolean, startTime: string, endTime: string, rawRoster: string }) => void;
 }
-
-// 產生時間選項 (09:00 ~ 23:00)
-const TIME_OPTIONS = Array.from({ length: 15 }, (_, i) => `${(i + 9).toString().padStart(2, '0')}:00`);
 
 export function EventList({ events, onSelectEvent, onCreateEvent }: EventListProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -24,8 +20,9 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
     date: new Date().toISOString().split('T')[0],
     name: '',
     copyRoster: true,
-    startTime: '16:00', // 預設下午 4 點
-    endTime: '17:00'
+    startTime: '16:00',
+    endTime: '17:00',
+    rawRoster: '' 
   });
 
   const sortedEvents = [...events].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -37,30 +34,72 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
       name: `Volleyball ${today}`,
       copyRoster: events.length > 0,
       startTime: '16:00',
-      endTime: '17:00'
+      endTime: '17:00',
+      rawRoster: '' 
     });
     setIsModalOpen(true);
   };
 
-  // 監聽開始時間改變，自動將結束時間設定為開始時間的下一小時
   const handleStartTimeChange = (newStartTime: string) => {
+    if (!newStartTime) return;
     const startHour = parseInt(newStartTime.split(':')[0], 10);
     const endHour = startHour + 1;
     const newEndTime = endHour <= 23 ? `${endHour.toString().padStart(2, '0')}:00` : '23:00';
     setFormData(prev => ({ ...prev, startTime: newStartTime, endTime: newEndTime }));
   };
 
+  // ★ 核心魔法：智能解析貼上的接龍文字 (取消場地抓取，保留純淨日期與時間)
+  const handleRawRosterChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    let newDate = formData.date;
+    let newStartTime = formData.startTime;
+    let newEndTime = formData.endTime;
+    let newName = formData.name;
+
+    const lines = text.split('\n').filter(l => l.trim() !== '');
+    
+    if (lines.length > 0) {
+      // 假設第一行通常是標題 (例如: 🔵3.15（日）14:00-17:00望廈場2🔵)
+      const firstLine = lines[0];
+
+      // 1. 智能抓取時間 (例如 14:00-17:00 或 14:00~17:00)
+      const timeMatch = firstLine.match(/(\d{1,2}:\d{2})\s*(?:-|至|~)\s*(\d{1,2}:\d{2})/);
+      if (timeMatch) {
+        newStartTime = timeMatch[1].padStart(5, '0');
+        newEndTime = timeMatch[2].padStart(5, '0');
+      }
+
+      // 2. 智能抓取日期 (例如 3.15 或 3/15 或 3月15)
+      const dateMatch = firstLine.match(/(\d{1,2})[\.\/月](\d{1,2})/);
+      if (dateMatch) {
+        const year = new Date().getFullYear(); // 預設為今年
+        const month = dateMatch[1].padStart(2, '0');
+        const day = dateMatch[2].padStart(2, '0');
+        newDate = `${year}-${month}-${day}`;
+        // ★ 直接將名稱預設為乾淨的日期格式，不抓取場地
+        newName = `Volleyball ${newDate}`;
+      }
+    }
+
+    // 立即更新表單讓使用者看到魔法
+    setFormData({
+      ...formData,
+      rawRoster: text,
+      date: newDate,
+      startTime: newStartTime,
+      endTime: newEndTime,
+      name: newName
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // 防呆：結束時間不能比開始時間早
     const sHour = parseInt(formData.startTime);
     const eHour = parseInt(formData.endTime);
     if (eHour <= sHour) {
       alert("結束時間必須晚於開始時間喔！");
       return;
     }
-
     onCreateEvent(formData);
     setIsModalOpen(false);
   };
@@ -119,91 +158,107 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 border border-white">
-            <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-blue-50/50">
-              <h3 className="font-black text-xl text-blue-900">建立新球局</h3>
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 border border-white max-h-[90vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-blue-50/50 shrink-0">
+              <h3 className="font-black text-xl text-blue-900 flex items-center gap-2">建立新球局 <Sparkles size={18} className="text-amber-500"/></h3>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-blue-600 transition-colors">
                 <X size={24} />
               </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              
-              <div>
-                <label className="block text-[10px] font-black text-blue-400 uppercase mb-1.5 ml-1">活動日期</label>
-                <div className="relative">
-                  <input 
-                    type="date" 
-                    required 
-                    value={formData.date} 
-                    onChange={(e) => {
-                      const newDate = e.target.value;
-                      setFormData({ ...formData, date: newDate, name: `Volleyball ${newDate}` });
-                    }} 
-                    className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold text-slate-700" 
+            <div className="overflow-y-auto flex-1 p-6">
+              <form id="create-event-form" onSubmit={handleSubmit} className="space-y-4">
+                
+                <div className="mb-6">
+                  <label className="block text-xs font-black text-emerald-600 uppercase mb-2 ml-1 flex items-center gap-1">
+                    <MessageCircle size={14} /> 貼上微信接龍 (全自動填寫)
+                  </label>
+                  <textarea 
+                    value={formData.rawRoster}
+                    onChange={handleRawRosterChange}
+                    placeholder="🔵1.1（日）14:00-17:00望廈場2🔵&#10;1. Carol🍓&#10;2. XXX "
+                    className="w-full px-5 py-4 bg-emerald-50 border-2 border-emerald-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-slate-700 text-sm h-32 resize-none placeholder:text-emerald-300 shadow-inner transition-all"
                   />
+                  <p className="text-[10px] font-bold text-emerald-500/80 ml-1 mt-1.5 flex items-center gap-1">
+                    <Sparkles size={10}/> 系統將自動解析日期與時段，過濾名單雜訊
+                  </p>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-[10px] font-black text-blue-400 uppercase mb-1.5 ml-1">球局名稱</label>
-                <input 
-                  type="text" 
-                  required 
-                  value={formData.name} 
-                  onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                  className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold text-slate-700" 
-                  placeholder="例如：週日晚排" 
-                />
-              </div>
-
-              {/* ★ 新增：預定時長 (開始與結束時間) */}
-              <div>
-                <label className="block text-[10px] font-black text-blue-400 uppercase mb-1.5 ml-1 flex items-center gap-1"><Clock size={12}/> 預定時長 (系統將自動切分時段)</label>
-                <div className="flex items-center gap-2">
-                  <select 
-                    value={formData.startTime}
-                    onChange={(e) => handleStartTimeChange(e.target.value)}
-                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-black text-slate-700 appearance-none text-center"
-                  >
-                    {TIME_OPTIONS.map(time => <option key={time} value={time}>{time}</option>)}
-                  </select>
-                  
-                  <span className="font-black text-slate-300">-</span>
-                  
-                  <select 
-                    value={formData.endTime}
-                    onChange={(e) => setFormData(prev => ({...prev, endTime: e.target.value}))}
-                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-black text-slate-700 appearance-none text-center"
-                  >
-                    {TIME_OPTIONS.map(time => <option key={time} value={time} disabled={parseInt(time) <= parseInt(formData.startTime)}>{time}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <label className="flex items-center gap-4 p-4 border border-slate-100 bg-slate-50/50 rounded-2xl cursor-pointer hover:bg-blue-50 transition-all group">
-                  <input 
-                    type="checkbox" 
-                    checked={formData.copyRoster} 
-                    onChange={(e) => setFormData({...formData, copyRoster: e.target.checked})} 
-                    disabled={events.length === 0} 
-                    className="w-6 h-6 text-blue-600 rounded-lg focus:ring-blue-600 border-slate-300" 
-                  />
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="block text-sm font-black text-slate-700 group-hover:text-blue-900">複製上次名單</span>
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase">自動匯入上一場陣容</span>
+                    <label className="block text-[10px] font-black text-blue-400 uppercase mb-1.5 ml-1">活動日期</label>
+                    <input 
+                      type="date" 
+                      required 
+                      value={formData.date} 
+                      onChange={(e) => setFormData({ ...formData, date: e.target.value })} 
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold text-slate-700 text-sm" 
+                    />
                   </div>
-                </label>
-              </div>
 
+                  <div>
+                    <label className="block text-[10px] font-black text-blue-400 uppercase mb-1.5 ml-1">球局名稱</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={formData.name} 
+                      onChange={(e) => setFormData({...formData, name: e.target.value})} 
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold text-slate-700 text-sm truncate" 
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-blue-400 uppercase mb-1.5 ml-1 flex items-center gap-1"><Clock size={12}/> 預定時長 (自動切分時段)</label>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="time" 
+                      required
+                      value={formData.startTime}
+                      onChange={(e) => handleStartTimeChange(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-black text-slate-700 text-center"
+                    />
+                    <span className="font-black text-slate-300">-</span>
+                    <input 
+                      type="time" 
+                      required
+                      value={formData.endTime}
+                      onChange={(e) => setFormData(prev => ({...prev, endTime: e.target.value}))}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-black text-slate-700 text-center"
+                    />
+                  </div>
+                </div>
+
+                {formData.rawRoster.trim() === '' && (
+                  <div className="pt-2 animate-in fade-in zoom-in duration-300">
+                    <label className="flex items-center gap-4 p-4 border border-slate-100 bg-slate-50/50 rounded-2xl cursor-pointer hover:bg-blue-50 transition-all group">
+                      <input 
+                        type="checkbox" 
+                        checked={formData.copyRoster} 
+                        onChange={(e) => setFormData({...formData, copyRoster: e.target.checked})} 
+                        disabled={events.length === 0} 
+                        className="w-6 h-6 text-blue-600 rounded-lg focus:ring-blue-600 border-slate-300" 
+                      />
+                      <div>
+                        <span className="block text-sm font-black text-slate-700 group-hover:text-blue-900">複製上次名單</span>
+                        <span className="block text-[10px] font-bold text-slate-400 uppercase">自動匯入上一場陣容</span>
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </form>
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-white shrink-0">
               <button 
+                form="create-event-form"
                 type="submit" 
-                className="w-full bg-blue-700 text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-800 active:scale-[0.98] transition-all mt-4 shadow-lg shadow-blue-200"
+                className="w-full bg-blue-700 text-white py-4 rounded-2xl font-black text-lg hover:bg-blue-800 active:scale-[0.98] transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2"
               >
-                開始算帳
+                <Sparkles size={20} /> 建立並解析名單
               </button>
-            </form>
+            </div>
+            
           </div>
         </div>
       )}
