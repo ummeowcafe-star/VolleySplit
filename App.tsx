@@ -39,18 +39,23 @@ export default function App() {
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
   const [isSecretUnlocked, setIsSecretUnlocked] = useState(false);
-  const [secretSearchTerm, setSecretSearchTerm] = useState(''); // ★ 新增：搜尋關鍵字狀態
+  const [secretSearchTerm, setSecretSearchTerm] = useState(''); 
 
   const [skillBook, setSkillBook] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem('volley_skill_book');
     return saved ? JSON.parse(saved) : {};
   });
 
-  // 這裡就是你說的「自動識別過往所有人並去重複」的引擎！
+  // ★ 新增：性別資料庫 (預設存於本地端)
+  const [genderBook, setGenderBook] = useState<Record<string, 'M' | 'F'>>(() => {
+    const saved = localStorage.getItem('volley_gender_book');
+    return saved ? JSON.parse(saved) : {};
+  });
+
   const allUniquePlayers = useMemo(() => {
-    const names = new Set(store.defaults.playerNames); // 先載入預設舊名單
-    store.events.forEach(e => e.players.forEach(p => names.add(p.name))); // 把所有歷史活動的球員都加進來
-    return Array.from(names).sort(); // 自動去重複並排序
+    const names = new Set(store.defaults.playerNames); 
+    store.events.forEach(e => e.players.forEach(p => names.add(p.name))); 
+    return Array.from(names).sort(); 
   }, [store.events, store.defaults.playerNames]);
 
   const fetchCloudContacts = async () => {
@@ -235,9 +240,9 @@ export default function App() {
                   <div>
                     <span className="font-black text-slate-700 text-sm flex items-center gap-2">
                       <ShieldCheck size={18} className="text-amber-500" />
-                      進階模式 (實力設定)
+                      進階模式)
                     </span>
-                    <p className="text-[10px] text-slate-400 font-bold mt-1">此數據僅存於本機，用於分隊平衡</p>
+                    <p className="text-[10px] text-slate-400 font-bold mt-1">此數據僅存於本機。</p>
                   </div>
                   {!isSecretUnlocked ? (
                     <button onClick={() => {
@@ -250,18 +255,16 @@ export default function App() {
                   ) : (
                     <button onClick={() => {
                       setIsSecretUnlocked(false);
-                      setSecretSearchTerm(''); // 關閉時清空搜尋
+                      setSecretSearchTerm(''); 
                     }} className="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-amber-600 active:scale-95 transition-all">
                       <Unlock size={18} />
                     </button>
                   )}
                 </div>
 
-                {/* ★ 展開後的進階模式內容 */}
                 {isSecretUnlocked && (
                   <div className="mt-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
                     
-                    {/* 搜尋列與人數統計 */}
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-1 rounded-md">總收錄：{allUniquePlayers.length} 人</span>
                       <div className="relative">
@@ -276,39 +279,71 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* 球員名單列表 */}
                     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                       {allUniquePlayers
                         .filter(name => name.toLowerCase().includes(secretSearchTerm.toLowerCase()))
                         .map(name => {
                           const currentLvl = skillBook[name] || 2;
+                          const currentGender = genderBook[name] || 'M'; // 預設給 M (男)
+
                           return (
-                            <div key={name} className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100 hover:border-amber-200 transition-colors">
-                              <span className="font-black text-slate-700 text-sm truncate pr-2">{name}</span>
-                              <div className="flex bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm shrink-0">
-                                {[1, 2, 3].map(level => (
+                            <div key={name} className="flex flex-wrap items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100 hover:border-amber-200 transition-colors gap-2">
+                              <span className="font-black text-slate-700 text-sm truncate pr-2 flex-1">{name}</span>
+                              
+                              <div className="flex items-center gap-2">
+                                {/* ★ 性別設定按鈕 */}
+                                <div className="flex bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm shrink-0">
                                   <button
-                                    key={level}
                                     onClick={() => {
-                                      const newBook = { ...skillBook, [name]: level };
-                                      setSkillBook(newBook);
-                                      localStorage.setItem('volley_skill_book', JSON.stringify(newBook));
+                                      const newBook = { ...genderBook, [name]: 'M' };
+                                      setGenderBook(newBook);
+                                      localStorage.setItem('volley_gender_book', JSON.stringify(newBook));
                                     }}
-                                    className={`px-3 py-1.5 text-[10px] font-black transition-colors ${
-                                      currentLvl === level 
-                                        ? level === 3 ? 'bg-red-500 text-white' : level === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'
-                                        : 'text-slate-400 hover:bg-slate-200'
+                                    className={`px-3 py-1.5 text-xs font-black transition-colors ${
+                                      currentGender === 'M' ? 'bg-blue-500 text-white' : 'text-slate-400 hover:bg-slate-200'
                                     }`}
                                   >
-                                    {level === 3 ? 'S' : level === 2 ? 'A' : 'B'}
+                                    ♂
                                   </button>
-                                ))}
+                                  <button
+                                    onClick={() => {
+                                      const newBook = { ...genderBook, [name]: 'F' };
+                                      setGenderBook(newBook);
+                                      localStorage.setItem('volley_gender_book', JSON.stringify(newBook));
+                                    }}
+                                    className={`px-3 py-1.5 text-xs font-black transition-colors ${
+                                      currentGender === 'F' ? 'bg-pink-500 text-white' : 'text-slate-400 hover:bg-slate-200'
+                                    }`}
+                                  >
+                                    ♀
+                                  </button>
+                                </div>
+
+                                {/* 實力設定按鈕 */}
+                                <div className="flex bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm shrink-0">
+                                  {[1, 2, 3].map(level => (
+                                    <button
+                                      key={level}
+                                      onClick={() => {
+                                        const newBook = { ...skillBook, [name]: level };
+                                        setSkillBook(newBook);
+                                        localStorage.setItem('volley_skill_book', JSON.stringify(newBook));
+                                      }}
+                                      className={`px-3 py-1.5 text-[10px] font-black transition-colors ${
+                                        currentLvl === level 
+                                          ? level === 3 ? 'bg-red-500 text-white' : level === 2 ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
+                                          : 'text-slate-400 hover:bg-slate-200'
+                                      }`}
+                                    >
+                                      {level === 3 ? 'S' : level === 2 ? 'A' : 'B'}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
                             </div>
                           );
                       })}
                       
-                      {/* 搜尋不到的提示 */}
                       {allUniquePlayers.filter(name => name.toLowerCase().includes(secretSearchTerm.toLowerCase())).length === 0 && (
                         <div className="text-center py-4 text-xs font-bold text-slate-400">
                           找不到這位球員 🏐
