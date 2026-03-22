@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Settings, List, Receipt, Save, Crown, Clock, UserPlus, Calendar as CalendarIcon, ShieldCheck, Lock, Unlock } from 'lucide-react';
+import { Settings, List, Receipt, Save, Crown, Clock, UserPlus, Calendar as CalendarIcon, ShieldCheck, Lock, Unlock, Search } from 'lucide-react';
 import { EventWorkspace } from './components/EventWorkspace';
 import { EventList } from './components/EventList';
 import { Ledger } from './components/Ledger';
@@ -39,15 +39,18 @@ export default function App() {
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
   const [isSecretUnlocked, setIsSecretUnlocked] = useState(false);
+  const [secretSearchTerm, setSecretSearchTerm] = useState(''); // ★ 新增：搜尋關鍵字狀態
+
   const [skillBook, setSkillBook] = useState<Record<string, number>>(() => {
     const saved = localStorage.getItem('volley_skill_book');
     return saved ? JSON.parse(saved) : {};
   });
 
+  // 這裡就是你說的「自動識別過往所有人並去重複」的引擎！
   const allUniquePlayers = useMemo(() => {
-    const names = new Set(store.defaults.playerNames);
-    store.events.forEach(e => e.players.forEach(p => names.add(p.name)));
-    return Array.from(names).sort();
+    const names = new Set(store.defaults.playerNames); // 先載入預設舊名單
+    store.events.forEach(e => e.players.forEach(p => names.add(p.name))); // 把所有歷史活動的球員都加進來
+    return Array.from(names).sort(); // 自動去重複並排序
   }, [store.events, store.defaults.playerNames]);
 
   const fetchCloudContacts = async () => {
@@ -108,11 +111,9 @@ export default function App() {
     setStore(prev => ({ ...prev, events: prev.events.map(e => e.id === updatedEvent.id ? updatedEvent : e) }));
   };
 
-  // ★ 升級版：包含自動切分時段與智能接龍解析 (已移除 copyRoster)
   const handleCreateEvent = (data: { name: string, date: string, startTime: string, endTime: string, rawRoster: string }) => {
     const newId = generateId();
     
-    // 1. 自動切分時段
     const startHour = parseInt(data.startTime.split(':')[0], 10);
     const endHour = parseInt(data.endTime.split(':')[0], 10);
     const autoSessions = [];
@@ -123,25 +124,22 @@ export default function App() {
         id: generateId(),
         name: sessionName,
         cost: store.defaults.cost,
-        hostId: 'Carol' // 預設代墊人 Carol
+        hostId: 'Carol' 
       });
     }
 
-    // 2. 智能解析微信接龍名單
     let initialPlayers: Player[] = [];
     
     if (data.rawRoster && data.rawRoster.trim() !== '') {
       const lines = data.rawRoster.split('\n');
       
       lines.forEach(line => {
-        let cleanName = line.replace(/^\s*\d+[\.、]\s*/, ''); // 移除開頭數字
-        cleanName = cleanName.replace(/[\(（\[【].*?[\)）\]】]/g, ''); // 移除括號與備註
-        cleanName = cleanName.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, ''); // 移除Emoji
+        let cleanName = line.replace(/^\s*\d+[\.、]\s*/, ''); 
+        cleanName = cleanName.replace(/[\(（\[【].*?[\)）\]】]/g, ''); 
+        cleanName = cleanName.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, ''); 
         cleanName = cleanName.trim();
         
-        // 依序加入名單，保證 100% 貼上的順序
         if (cleanName) {
-          // 防重複機制：如果名單還沒有這個人，才加進去
           if (!initialPlayers.find(p => p.name === cleanName)) {
             initialPlayers.push({ id: generateId(), name: cleanName });
           }
@@ -154,8 +152,8 @@ export default function App() {
       date: data.date, 
       eventName: data.name, 
       defaultCost: store.defaults.cost,
-      players: initialPlayers, // 載入解析後的球員名單 (或是空名單)
-      sessions: autoSessions, // 載入自動生成的時段陣列
+      players: initialPlayers, 
+      sessions: autoSessions, 
       participation: {}
     };
     
@@ -237,7 +235,7 @@ export default function App() {
                   <div>
                     <span className="font-black text-slate-700 text-sm flex items-center gap-2">
                       <ShieldCheck size={18} className="text-amber-500" />
-                      進階模式
+                      進階模式 (實力設定)
                     </span>
                     <p className="text-[10px] text-slate-400 font-bold mt-1">此數據僅存於本機，用於分隊平衡</p>
                   </div>
@@ -250,41 +248,73 @@ export default function App() {
                       <Lock size={18} />
                     </button>
                   ) : (
-                    <button onClick={() => setIsSecretUnlocked(false)} className="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-amber-600 active:scale-95 transition-all">
+                    <button onClick={() => {
+                      setIsSecretUnlocked(false);
+                      setSecretSearchTerm(''); // 關閉時清空搜尋
+                    }} className="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-amber-600 active:scale-95 transition-all">
                       <Unlock size={18} />
                     </button>
                   )}
                 </div>
 
+                {/* ★ 展開後的進階模式內容 */}
                 {isSecretUnlocked && (
-                  <div className="space-y-2 mt-4 pt-4 border-t border-slate-100 max-h-[400px] overflow-y-auto pr-2">
-                    {allUniquePlayers.map(name => {
-                      const currentLvl = skillBook[name] || 2;
-                      return (
-                        <div key={name} className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                          <span className="font-black text-slate-700">{name}</span>
-                          <div className="flex bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm shrink-0">
-                            {[1, 2, 3].map(level => (
-                              <button
-                                key={level}
-                                onClick={() => {
-                                  const newBook = { ...skillBook, [name]: level };
-                                  setSkillBook(newBook);
-                                  localStorage.setItem('volley_skill_book', JSON.stringify(newBook));
-                                }}
-                                className={`px-3 py-1.5 text-xs font-black transition-colors ${
-                                  currentLvl === level 
-                                    ? level === 3 ? 'bg-red-500 text-white' : level === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'
-                                    : 'text-slate-400 hover:bg-slate-200'
-                                }`}
-                              >
-                                {level === 3 ? 'S' : level === 2 ? 'A' : 'B'}
-                              </button>
-                            ))}
-                          </div>
+                  <div className="mt-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
+                    
+                    {/* 搜尋列與人數統計 */}
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-1 rounded-md">總收錄：{allUniquePlayers.length} 人</span>
+                      <div className="relative">
+                        <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input 
+                          type="text" 
+                          placeholder="搜尋球員..." 
+                          value={secretSearchTerm}
+                          onChange={(e) => setSecretSearchTerm(e.target.value)}
+                          className="pl-7 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 w-32 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 球員名單列表 */}
+                    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                      {allUniquePlayers
+                        .filter(name => name.toLowerCase().includes(secretSearchTerm.toLowerCase()))
+                        .map(name => {
+                          const currentLvl = skillBook[name] || 2;
+                          return (
+                            <div key={name} className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100 hover:border-amber-200 transition-colors">
+                              <span className="font-black text-slate-700 text-sm truncate pr-2">{name}</span>
+                              <div className="flex bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm shrink-0">
+                                {[1, 2, 3].map(level => (
+                                  <button
+                                    key={level}
+                                    onClick={() => {
+                                      const newBook = { ...skillBook, [name]: level };
+                                      setSkillBook(newBook);
+                                      localStorage.setItem('volley_skill_book', JSON.stringify(newBook));
+                                    }}
+                                    className={`px-3 py-1.5 text-[10px] font-black transition-colors ${
+                                      currentLvl === level 
+                                        ? level === 3 ? 'bg-red-500 text-white' : level === 2 ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'
+                                        : 'text-slate-400 hover:bg-slate-200'
+                                    }`}
+                                  >
+                                    {level === 3 ? 'S' : level === 2 ? 'A' : 'B'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                      })}
+                      
+                      {/* 搜尋不到的提示 */}
+                      {allUniquePlayers.filter(name => name.toLowerCase().includes(secretSearchTerm.toLowerCase())).length === 0 && (
+                        <div className="text-center py-4 text-xs font-bold text-slate-400">
+                          找不到這位球員 🏐
                         </div>
-                      );
-                    })}
+                      )}
+                    </div>
                   </div>
                 )}
              </section>
