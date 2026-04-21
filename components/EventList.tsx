@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ChevronRight, Users, Plus, X, Calendar, FileText, Clock, MessageCircle, Sparkles } from 'lucide-react';
 
 interface Event {
@@ -11,7 +11,6 @@ interface Event {
 interface EventListProps {
   events: Event[];
   onSelectEvent: (id: string) => void;
-  // ★ 移除了 copyRoster
   onCreateEvent: (data: { name: string, date: string, startTime: string, endTime: string, rawRoster: string }) => void;
 }
 
@@ -26,6 +25,18 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
   });
 
   const sortedEvents = [...events].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const groupedEvents = useMemo(() => {
+    const groups: { [year: string]: Event[] } = {};
+    sortedEvents.forEach(event => {
+      const year = new Date(event.date).getFullYear().toString();
+      if (!groups[year]) groups[year] = [];
+      groups[year].push(event);
+    });
+    return groups;
+  }, [sortedEvents]);
+
+  const sortedYears = Object.keys(groupedEvents).sort((a, b) => parseInt(b) - parseInt(a));
 
   const openModal = () => {
     const today = new Date().toISOString().split('T')[0];
@@ -50,31 +61,29 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // ★ 魔法移到這裡：只有在按下按鈕時，才進行解析
     let finalDate = formData.date;
     let finalStartTime = formData.startTime;
     let finalEndTime = formData.endTime;
     let finalName = formData.name;
 
     if (formData.rawRoster.trim() !== '') {
-      const lines = formData.rawRoster.split('\n').filter(l => l.trim() !== '');
-      if (lines.length > 0) {
-        const firstLine = lines[0];
-        
-        const timeMatch = firstLine.match(/(\d{1,2}:\d{2})\s*(?:-|至|~)\s*(\d{1,2}:\d{2})/);
-        if (timeMatch) {
-          finalStartTime = timeMatch[1].padStart(5, '0');
-          finalEndTime = timeMatch[2].padStart(5, '0');
-        }
+      const text = formData.rawRoster;
+      
+      // ★ 全局搜索時間 (不管它在哪一行)
+      const timeMatch = text.match(/(\d{1,2}:\d{2})\s*(?:-|至|~)\s*(\d{1,2}:\d{2})/);
+      if (timeMatch) {
+        finalStartTime = timeMatch[1].padStart(5, '0');
+        finalEndTime = timeMatch[2].padStart(5, '0');
+      }
 
-        const dateMatch = firstLine.match(/(\d{1,2})[\.\/月](\d{1,2})/);
-        if (dateMatch) {
-          const year = new Date().getFullYear();
-          const month = dateMatch[1].padStart(2, '0');
-          const day = dateMatch[2].padStart(2, '0');
-          finalDate = `${year}-${month}-${day}`;
-          finalName = `Volleyball ${finalDate}`;
-        }
+      // ★ 全局搜索日期 (例如 4.19 或 4月19)
+      const dateMatch = text.match(/(\d{1,2})[\.\/月](\d{1,2})/);
+      if (dateMatch) {
+        const year = new Date().getFullYear();
+        const month = dateMatch[1].padStart(2, '0');
+        const day = dateMatch[2].padStart(2, '0');
+        finalDate = `${year}-${month}-${day}`;
+        finalName = `Volleyball ${finalDate}`;
       }
     }
 
@@ -85,7 +94,6 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
       return;
     }
 
-    // 將最終解析好的資料送給 App.tsx
     onCreateEvent({
       name: finalName,
       date: finalDate,
@@ -106,8 +114,10 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
         <Plus size={24} /> New Event
       </button>
       
-      <div className="space-y-4">
-        <h2 className="font-black text-xs text-blue-900/60 tracking-wider uppercase mb-3 px-1">History</h2>
+      <div>
+        <h2 className="font-black text-xs text-blue-900/60 tracking-wider uppercase mb-4 px-1 flex items-center gap-1">
+          <Calendar size={14} /> History
+        </h2>
         
         {sortedEvents.length === 0 ? (
           <div className="text-center p-10 border-2 border-dashed border-blue-200 rounded-3xl bg-white/50">
@@ -116,35 +126,48 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
             <p className="text-blue-300 text-sm">Tap the button above to start!</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {sortedEvents.map(event => {
-              const dateObj = new Date(event.date);
-              const month = dateObj.getMonth() + 1;
-              const day = dateObj.getDate();
-              
-              return (
-                <button
-                  key={event.id}
-                  onClick={() => onSelectEvent(event.id)}
-                  className="w-full bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-2xl p-3 flex items-center justify-between shadow-md shadow-yellow-200/50 transition-all hover:shadow-lg hover:scale-[1.01] active:scale-98 group text-left border border-yellow-400/50"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex-shrink-0 w-14 h-14 bg-white/90 rounded-xl flex flex-col items-center justify-center shadow-sm backdrop-blur-sm">
-                      <span className="text-[10px] font-black text-blue-600 uppercase leading-tight">{month}月</span>
-                      <span className="text-2xl font-black text-blue-800 leading-none">{day}</span>
-                    </div>
-                    <div>
-                      <h3 className="font-black text-blue-900 text-base">{event.eventName}</h3>
-                      <div className="flex items-center gap-1.5 mt-0.5 text-blue-700/80">
-                        <Users size={14} />
-                        <span className="text-xs font-bold">{event.players.length} Players</span>
-                      </div>
-                    </div>
+          <div className="space-y-8"> 
+            {sortedYears.map(year => (
+              <div key={year} className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                <div className="flex items-center gap-3 px-1 mb-1">
+                  <div className="bg-slate-200 text-slate-600 px-3 py-1 rounded-lg font-black text-sm shadow-sm border border-slate-300">
+                    {year} 年
                   </div>
-                  <ChevronRight size={20} className="text-blue-700 opacity-60 group-hover:opacity-100" />
-                </button>
-              );
-            })}
+                  <div className="h-px bg-slate-200 flex-1"></div>
+                </div>
+
+                <div className="space-y-3">
+                  {groupedEvents[year].map(event => {
+                    const dateObj = new Date(event.date);
+                    const month = dateObj.getMonth() + 1;
+                    const day = dateObj.getDate();
+                    
+                    return (
+                      <button
+                        key={event.id}
+                        onClick={() => onSelectEvent(event.id)}
+                        className="w-full bg-gradient-to-br from-yellow-400 to-yellow-500 rounded-2xl p-3 flex items-center justify-between shadow-md shadow-yellow-200/50 transition-all hover:shadow-lg hover:scale-[1.01] active:scale-98 group text-left border border-yellow-400/50"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="flex-shrink-0 w-14 h-14 bg-white/90 rounded-xl flex flex-col items-center justify-center shadow-sm backdrop-blur-sm">
+                            <span className="text-[10px] font-black text-blue-600 uppercase leading-tight">{month}月</span>
+                            <span className="text-2xl font-black text-blue-800 leading-none">{day}</span>
+                          </div>
+                          <div>
+                            <h3 className="font-black text-blue-900 text-base">{event.eventName}</h3>
+                            <div className="flex items-center gap-1.5 mt-0.5 text-blue-700/80">
+                              <Users size={14} />
+                              <span className="text-xs font-bold">{event.players.length} Players</span>
+                            </div>
+                          </div>
+                        </div>
+                        <ChevronRight size={20} className="text-blue-700 opacity-60 group-hover:opacity-100" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -161,15 +184,14 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
             
             <div className="overflow-y-auto flex-1 p-6">
               <form id="create-event-form" onSubmit={handleSubmit} className="space-y-4">
-                
                 <div className="mb-6">
                   <label className="block text-xs font-black text-emerald-600 uppercase mb-2 ml-1 flex items-center gap-1">
                     <MessageCircle size={14} /> 貼上微信接龍 (全自動填寫)
                   </label>
                   <textarea 
                     value={formData.rawRoster}
-                    onChange={(e) => setFormData({...formData, rawRoster: e.target.value})} // ★ 現在只負責存字，不觸發解析
-                    placeholder="🔵1.1（日）14:00-17:00望廈場2🔵&#10;1. Carol🍓&#10;2. XXX"
+                    onChange={(e) => setFormData({...formData, rawRoster: e.target.value})}
+                    placeholder="🔵4.19（日） 16:00-19:00 望廈場🔵&#10;1. Carol🍓&#10;2. Matthew（休假中）"
                     className="w-full px-5 py-4 bg-emerald-50 border-2 border-emerald-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-slate-700 text-sm h-32 resize-none placeholder:text-emerald-300 shadow-inner transition-all"
                   />
                   <p className="text-[10px] font-bold text-emerald-500/80 ml-1 mt-1.5 flex items-center gap-1">
@@ -221,9 +243,6 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
                     />
                   </div>
                 </div>
-                
-                {/* 已經徹底移除「複製上次名單」的區塊 */}
-
               </form>
             </div>
 
@@ -236,7 +255,6 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
                 <Sparkles size={20} /> 建立並解析名單
               </button>
             </div>
-            
           </div>
         </div>
       )}

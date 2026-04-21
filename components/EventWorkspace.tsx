@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { EventData, Session } from '../types';
 import { MatrixGrid } from './MatrixGrid';
 import { SummaryCard } from './SummaryCard';
-import { ArrowLeft, Trash2, Clock, UserPlus, X, Check, ArrowUp, Users } from 'lucide-react';
+import { ArrowLeft, Trash2, Clock, UserPlus, X, Check, ArrowUp, Users, Edit2 } from 'lucide-react';
 import { TeamGenerator } from './TeamGenerator';
 
 interface Props {
@@ -14,7 +14,6 @@ interface Props {
   cloudContacts: { id: string; name: string; phone: string }[];
 }
 
-// --- 內部元件：自定義彈窗 (Modal) ---
 const Modal = ({ 
   isOpen, 
   title, 
@@ -62,14 +61,17 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
   const [targetId, setTargetId] = useState<string | null>(null);
   const [showTeamGenerator, setShowTeamGenerator] = useState(false);
 
+  // ★ 新增：標題編輯狀態
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
+
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
-  // 捲動回頂部函數
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // --- 邏輯處理 ---
   const handleHostChange = (sessionId: string, hostId: string) => {
     const updatedEvent = {
       ...event,
@@ -87,6 +89,22 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
     else newParticipation[key] = weight;
     onUpdate({ ...event, participation: newParticipation });
   };
+
+  // ★ 新增：儲存編輯後的標題
+  const saveTitle = () => {
+    if (editTitleValue.trim()) {
+      onUpdate({ ...event, eventName: editTitleValue.trim() });
+    }
+    setIsEditingTitle(false);
+  };
+
+  // ★ 焦點自動定位到編輯框並全選
+  useEffect(() => {
+    if (isEditingTitle && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [isEditingTitle]);
 
   const handleSubmit = () => {
     if (modalType === 'add-session') {
@@ -130,7 +148,6 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
 
   return (
     <div className="relative space-y-6 pb-32 animate-in fade-in slide-in-from-right-4 duration-300">
-      {/* 1. Modals */}
       <Modal isOpen={modalType === 'add-session'} title="新增時段" onSubmit={handleSubmit} onClose={() => setModalType(null)} submitLabel="新增">
         <input autoFocus value={inputValue} onChange={e => setInputValue(e.target.value)} placeholder="例如: 18:00 - 20:00" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-600 font-bold" onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
       </Modal>
@@ -143,7 +160,6 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
         <p className="text-slate-500 font-medium">此動作無法復原，確定要執行嗎？</p>
       </Modal>
 
-      {/* 2. Sticky Header - 固定頂部導航條 */}
       <div className="sticky top-0 z-50 -mx-4 px-4 py-3 bg-[#f8fafc]/80 backdrop-blur-md border-b border-slate-100 flex items-center justify-between mb-2">
         <button 
           onClick={onBack} 
@@ -161,24 +177,50 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
       </div>
 
       <header className="pt-2">
-        <h1 className="text-3xl font-black text-blue-900 tracking-tight">{event.eventName}</h1>
+        {/* ★ 可點擊編輯的標題區塊 */}
+        {isEditingTitle ? (
+          <div className="flex items-center gap-2 mb-1 animate-in fade-in duration-200">
+            <input 
+              ref={editInputRef}
+              type="text" 
+              value={editTitleValue} 
+              onChange={e => setEditTitleValue(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && saveTitle()}
+              className="flex-1 text-2xl font-black text-blue-900 tracking-tight bg-slate-50 border border-slate-300 rounded-xl px-3 py-1 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            />
+            <button onClick={saveTitle} className="bg-emerald-100 text-emerald-600 p-2 rounded-xl hover:bg-emerald-200 active:scale-95 transition-all">
+              <Check size={18} />
+            </button>
+            <button onClick={() => setIsEditingTitle(false)} className="bg-slate-100 text-slate-500 p-2 rounded-xl hover:bg-slate-200 active:scale-95 transition-all">
+              <X size={18} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 mb-1 group cursor-pointer" onClick={() => {
+            setEditTitleValue(event.eventName);
+            setIsEditingTitle(true);
+          }}>
+            <h1 className="text-3xl font-black text-blue-900 tracking-tight">{event.eventName}</h1>
+            <div className="text-slate-300 group-hover:text-blue-500 transition-colors p-1 bg-slate-100/50 rounded-lg">
+              <Edit2 size={16} />
+            </div>
+          </div>
+        )}
         <p className="text-slate-400 font-bold">{event.date}</p>
       </header>
 
-      {/* 3. Action Buttons */}
-<div className="grid grid-cols-3 gap-3">
-  <button onClick={() => setModalType('add-session')} className="flex flex-col items-center justify-center gap-1.5 py-3 bg-white border border-slate-200 rounded-2xl font-black text-blue-700 shadow-sm active:scale-95 transition-all">
-    <Clock size={18} /> <span className="text-[10px] uppercase tracking-widest">加時段</span>
-  </button>
-  <button onClick={() => setModalType('add-player')} className="flex flex-col items-center justify-center gap-1.5 py-3 bg-white border border-slate-200 rounded-2xl font-black text-blue-700 shadow-sm active:scale-95 transition-all">
-    <UserPlus size={18} /> <span className="text-[10px] uppercase tracking-widest">加球員</span>
-  </button>
-  <button onClick={() => setShowTeamGenerator(true)} className="flex flex-col items-center justify-center gap-1.5 py-3 bg-gradient-to-br from-indigo-500 to-blue-600 border border-blue-400 rounded-2xl font-black text-white shadow-sm active:scale-95 transition-all">
-    <Users size={18} /> <span className="text-[10px] uppercase tracking-widest">智能分隊</span>
-  </button>
-</div>
+      <div className="grid grid-cols-3 gap-3">
+        <button onClick={() => setModalType('add-session')} className="flex flex-col items-center justify-center gap-1.5 py-3 bg-white border border-slate-200 rounded-2xl font-black text-blue-700 shadow-sm active:scale-95 transition-all">
+          <Clock size={18} /> <span className="text-[10px] uppercase tracking-widest">加時段</span>
+        </button>
+        <button onClick={() => setModalType('add-player')} className="flex flex-col items-center justify-center gap-1.5 py-3 bg-white border border-slate-200 rounded-2xl font-black text-blue-700 shadow-sm active:scale-95 transition-all">
+          <UserPlus size={18} /> <span className="text-[10px] uppercase tracking-widest">加球員</span>
+        </button>
+        <button onClick={() => setShowTeamGenerator(true)} className="flex flex-col items-center justify-center gap-1.5 py-3 bg-gradient-to-br from-indigo-500 to-blue-600 border border-blue-400 rounded-2xl font-black text-white shadow-sm active:scale-95 transition-all">
+          <Users size={18} /> <span className="text-[10px] uppercase tracking-widest">智能分隊</span>
+        </button>
+      </div>
 
-      {/* 4. Matrix & Summary */}
       <MatrixGrid 
         event={event} 
         cloudContacts={cloudContacts} 
@@ -186,7 +228,6 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
         onRemoveSession={id => { setTargetId(id); setModalType('delete-session'); }}
         onRemovePlayer={id => { setTargetId(id); setModalType('delete-player'); }}
         onHostChange={handleHostChange} 
-        // ★ 核心補全：把拖曳排序的結果存進 event 裡
         onReorderPlayers={(newPlayers) => onUpdate({ ...event, players: newPlayers })}
         onReorderSessions={(newSessions) => onUpdate({ ...event, sessions: newSessions })}
       />
@@ -198,13 +239,12 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
       />
 
        {showTeamGenerator && (
-  <TeamGenerator 
-    event={event} 
-    onClose={() => setShowTeamGenerator(false)} 
-  />
-)}
+        <TeamGenerator 
+          event={event} 
+          onClose={() => setShowTeamGenerator(false)} 
+        />
+      )}
 
-      {/* 5. 回頂部按鈕 */}
       <button
         onClick={scrollToTop}
         className="fixed bottom-8 right-6 z-[60] p-4 bg-blue-700 text-white rounded-full shadow-2xl transition-all hover:bg-blue-800 active:scale-90 ring-4 ring-white"

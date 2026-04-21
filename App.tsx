@@ -46,7 +46,6 @@ export default function App() {
     return saved ? JSON.parse(saved) : {};
   });
 
-  // ★ 新增：性別資料庫 (預設存於本地端)
   const [genderBook, setGenderBook] = useState<Record<string, 'M' | 'F'>>(() => {
     const saved = localStorage.getItem('volley_gender_book');
     return saved ? JSON.parse(saved) : {};
@@ -139,14 +138,18 @@ export default function App() {
       const lines = data.rawRoster.split('\n');
       
       lines.forEach(line => {
-        let cleanName = line.replace(/^\s*\d+[\.、]\s*/, ''); 
-        cleanName = cleanName.replace(/[\(（\[【].*?[\)）\]】]/g, ''); 
-        cleanName = cleanName.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, ''); 
-        cleanName = cleanName.trim();
-        
-        if (cleanName) {
-          if (!initialPlayers.find(p => p.name === cleanName)) {
-            initialPlayers.push({ id: generateId(), name: cleanName });
+        // ★ 核心修復：只擷取開頭有「數字 + 點/頓號」的行數 (例如 "1.", "12、")
+        if (/^\s*\d+[\.、]\s*/.test(line)) {
+          let cleanName = line.replace(/^\s*\d+[\.、]\s*/, ''); // 移除序號
+          cleanName = cleanName.replace(/[\(（\[【].*?[\)）\]】]/g, ''); // 移除括號與備註 (例如: (休假中))
+          cleanName = cleanName.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, ''); // 移除表情符號
+          cleanName = cleanName.replace(/[~^]+/g, ''); // 額外移除 ~^^ 這類常見顏文字符號
+          cleanName = cleanName.trim();
+          
+          if (cleanName) {
+            if (!initialPlayers.find(p => p.name === cleanName)) {
+              initialPlayers.push({ id: generateId(), name: cleanName });
+            }
           }
         }
       });
@@ -240,9 +243,9 @@ export default function App() {
                   <div>
                     <span className="font-black text-slate-700 text-sm flex items-center gap-2">
                       <ShieldCheck size={18} className="text-amber-500" />
-                      進階模式)
+                      進階模式 (實力與性別)
                     </span>
-                    <p className="text-[10px] text-slate-400 font-bold mt-1">此數據僅存於本機。</p>
+                    <p className="text-[10px] text-slate-400 font-bold mt-1">此數據僅存於本機，用於分隊平衡</p>
                   </div>
                   {!isSecretUnlocked ? (
                     <button onClick={() => {
@@ -284,14 +287,13 @@ export default function App() {
                         .filter(name => name.toLowerCase().includes(secretSearchTerm.toLowerCase()))
                         .map(name => {
                           const currentLvl = skillBook[name] || 2;
-                          const currentGender = genderBook[name] || 'M'; // 預設給 M (男)
+                          const currentGender = genderBook[name] || 'M'; 
 
                           return (
                             <div key={name} className="flex flex-wrap items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-100 hover:border-amber-200 transition-colors gap-2">
                               <span className="font-black text-slate-700 text-sm truncate pr-2 flex-1">{name}</span>
                               
                               <div className="flex items-center gap-2">
-                                {/* ★ 性別設定按鈕 */}
                                 <div className="flex bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm shrink-0">
                                   <button
                                     onClick={() => {
@@ -319,7 +321,6 @@ export default function App() {
                                   </button>
                                 </div>
 
-                                {/* 實力設定按鈕 */}
                                 <div className="flex bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm shrink-0">
                                   {[1, 2, 3].map(level => (
                                     <button
