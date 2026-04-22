@@ -22,12 +22,14 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, reportedStatus, on
     return phoneBook[name] || '';
   };
 
-  const handleCopy = (phone: string, uniqueKey: string) => {
+  // ★ 核心升級：接收一組 uniqueKeys 陣列，進行「批次連動報數」
+  const handleCopy = (phone: string, uniqueKeys: string[]) => {
     navigator.clipboard.writeText(phone);
     alert(`已複製代墊人號碼：${phone}\n請前往支付 App 進行轉帳！`);
     
     setTimeout(() => {
-      onReportPaid(uniqueKey);
+      // 10秒後，將所有同屬該代墊人的帳單一次性全部標記為「已轉帳」
+      uniqueKeys.forEach(key => onReportPaid(key));
     }, 10000);
   };
 
@@ -119,7 +121,6 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, reportedStatus, on
       groupedDebts[debt.fromName].push(debt);
     });
 
-    // ★ 核心升級：排序邏輯 (已轉帳的橘色卡片置頂)
     const debtorNames = Object.keys(groupedDebts).sort((a, b) => {
       const unpaidDebtsA = groupedDebts[a].filter(d => !paidStatus[d.uniqueKey]);
       const unpaidDebtsB = groupedDebts[b].filter(d => !paidStatus[d.uniqueKey]);
@@ -127,16 +128,13 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, reportedStatus, on
       const hasUnpaidA = unpaidDebtsA.length > 0;
       const hasUnpaidB = unpaidDebtsB.length > 0;
 
-      // 1. 結清的(灰)永遠沉底
       if (hasUnpaidA !== hasUnpaidB) return hasUnpaidA ? -1 : 1;
 
-      // 2. 都有欠款時，有「已轉帳」狀態的置頂
       const hasReportedA = unpaidDebtsA.some(d => reportedStatus[d.uniqueKey]);
       const hasReportedB = unpaidDebtsB.some(d => reportedStatus[d.uniqueKey]);
 
       if (hasReportedA !== hasReportedB) return hasReportedA ? -1 : 1;
 
-      // 3. 狀態一樣時，按欠款金額由大到小排
       const amtA = unpaidDebtsA.reduce((sum, d) => sum + d.amount, 0);
       const amtB = unpaidDebtsB.reduce((sum, d) => sum + d.amount, 0);
       return amtB - amtA;
@@ -155,15 +153,12 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, reportedStatus, on
           <div className="space-y-4">
             {debtorNames.map(debtorName => {
               const isAllPaid = groupedDebts[debtorName].filter(d => !paidStatus[d.uniqueKey]).length === 0;
-              // ★ 偵測這個人是不是有任何一筆帳單點了「已轉帳」
               const hasReported = groupedDebts[debtorName].some(d => !paidStatus[d.uniqueKey] && reportedStatus[d.uniqueKey]);
 
-              // ★ 決定整個大卡片的樣式
               let cardStyle = "bg-white rounded-[2rem] p-5 border shadow-sm transition-all duration-300 relative overflow-hidden ";
               if (isAllPaid) {
                 cardStyle += "border-emerald-100 opacity-60 bg-slate-50";
               } else if (hasReported) {
-                // 整個大卡片變成強烈的橙色高光！
                 cardStyle += "border-amber-400 bg-amber-50/40 shadow-md shadow-amber-200/50 ring-2 ring-amber-400/20";
               } else {
                 cardStyle += "border-slate-200";
@@ -222,7 +217,6 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, reportedStatus, on
                             <span className={`font-black text-sm flex items-center gap-1.5 ${textStyle}`}>
                               支付給 {debt.toName} <span className={numberStyle}>${debt.amount.toFixed(1)}</span>
                             </span>
-                            {/* ★ 改名為：球友已轉帳 */}
                             {!isPaid && isReported && (
                                <span className="text-[10px] font-black text-amber-600 uppercase mt-0.5 flex items-center gap-1"><Sparkles size={10}/> 球友已轉帳</span>
                             )}
@@ -278,7 +272,17 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, reportedStatus, on
                           {phone && (
                             <div className="flex items-center gap-2 mb-2">
                               <span className="text-xs font-bold text-slate-600 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">{phone}</span>
-                              <button onClick={() => handleCopy(phone, d.uniqueKey)} className="bg-indigo-50 text-indigo-600 p-1.5 rounded-lg hover:bg-indigo-500 hover:text-white active:scale-90 transition-all flex items-center gap-1 shadow-sm">
+                              
+                              {/* ★ 按下複製時，抓取該球員所有欠這位代墊人(d.toName)的帳單，進行批次標記 */}
+                              <button 
+                                onClick={() => {
+                                  const keysForThisHost = debtor.details
+                                    .filter(x => x.toName === d.toName)
+                                    .map(x => x.uniqueKey);
+                                  handleCopy(phone, keysForThisHost);
+                                }} 
+                                className="bg-indigo-50 text-indigo-600 p-1.5 rounded-lg hover:bg-indigo-500 hover:text-white active:scale-90 transition-all flex items-center gap-1 shadow-sm"
+                              >
                                 <Copy size={14} /> <span className="text-xs font-black">複製</span>
                               </button>
                             </div>
