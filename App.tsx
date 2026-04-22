@@ -15,7 +15,8 @@ interface Session { id: string; name: string; cost: number; hostId?: string; }
 interface Player { id: string; name: string; }
 interface EventData { id: string; date: string; eventName: string; defaultCost: number; players: Player[]; sessions: Session[]; participation?: { [key: string]: number }; }
 interface GlobalDefaults { cost: number; playerNames: string[]; sessionNames: string[]; phoneBook: { [name: string]: string }; }
-interface GlobalState { events: EventData[]; defaults: GlobalDefaults; paidStatus: { [key: string]: boolean }; }
+// ★ 包含 reportedStatus，用來記錄球員是否已點擊(或自動觸發)報數
+interface GlobalState { events: EventData[]; defaults: GlobalDefaults; paidStatus: { [key: string]: boolean }; reportedStatus: { [key: string]: boolean }; }
 interface Contact { id: string; name: string; phone: string; }
 
 export default function App() {
@@ -27,7 +28,8 @@ export default function App() {
       sessionNames: ['15:00 - 16:00', '16:00 - 17:00'],
       phoneBook: PLAYER_PHONE_BOOK
     },
-    paidStatus: {} 
+    paidStatus: {},
+    reportedStatus: {} 
   });
   
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
@@ -86,6 +88,7 @@ export default function App() {
         if (data) {
           let cloudData = data.data;
           if (!cloudData.defaults.phoneBook) cloudData.defaults.phoneBook = PLAYER_PHONE_BOOK;
+          if (!cloudData.reportedStatus) cloudData.reportedStatus = {}; // 確保舊資料有這個欄位
           setStore(cloudData);
         }
         await fetchCloudContacts();
@@ -107,8 +110,21 @@ export default function App() {
     saveData();
   }, [store, isLoaded]);
 
-  const handleTogglePaid = (playerName: string) => {
-    setStore(prev => ({ ...prev, paidStatus: { ...prev.paidStatus, [playerName]: !prev.paidStatus[playerName] } }));
+  // ★ 當主辦人核銷(打勾)時，自動取消報數狀態
+  const handleTogglePaid = (key: string) => {
+    setStore(prev => ({ 
+      ...prev, 
+      paidStatus: { ...prev.paidStatus, [key]: !prev.paidStatus[key] },
+      reportedStatus: { ...prev.reportedStatus, [key]: false } 
+    }));
+  };
+
+  // ★ 記錄球員已報數的狀態 (用於背景 10 秒觸發)
+  const handleReportPaid = (key: string) => {
+    setStore(prev => ({ 
+      ...prev, 
+      reportedStatus: { ...prev.reportedStatus, [key]: true } 
+    }));
   };
 
   const handleUpdateEvent = (updatedEvent: EventData) => {
@@ -138,6 +154,7 @@ export default function App() {
       const lines = data.rawRoster.split('\n');
       
       lines.forEach(line => {
+        // 嚴格判斷是否有數字序號
         if (/^\s*\d+[\.、]\s*/.test(line)) {
           let cleanName = line.replace(/^\s*\d+[\.、]\s*/, ''); 
           cleanName = cleanName.replace(/[\(（\[【].*?[\)）\]】]/g, ''); 
@@ -217,12 +234,14 @@ export default function App() {
           </div>
         )}
 
-        {/* ★ 這裡將通訊錄傳遞給了 Ledger */}
+        {/* ★ 將所需的方法全部傳遞給 Ledger */}
         {activeTab === 'summary' && (
           <Ledger 
             events={store.events} 
             paidStatus={store.paidStatus} 
+            reportedStatus={store.reportedStatus}
             onTogglePaid={handleTogglePaid} 
+            onReportPaid={handleReportPaid}
             phoneBook={store.defaults.phoneBook} 
             cloudContacts={cloudContacts} 
           />
