@@ -1,18 +1,33 @@
 import React, { useState, useMemo } from 'react';
 import { EventData } from '../types';
-import { Receipt, CheckCircle2, Check, ArrowLeft, ChevronRight, AlertCircle, Calendar as CalendarIcon, Search, X, Wallet } from 'lucide-react';
+import { Receipt, CheckCircle2, Check, ArrowLeft, ChevronRight, AlertCircle, Calendar as CalendarIcon, Search, X, Wallet, Copy } from 'lucide-react';
 
 interface Props {
   events: EventData[];
   paidStatus: { [key: string]: boolean };
   onTogglePaid: (key: string) => void;
+  // ★ 新增：接收通訊錄資料庫
+  phoneBook: { [name: string]: string };
+  cloudContacts: { id: string; name: string; phone: string }[];
 }
 
-export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) => {
+export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid, phoneBook, cloudContacts }) => {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState(''); // ★ 新增：搜尋關鍵字狀態
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // 1. 核心引擎：預先計算所有活動的帳目明細
+  // 取得電話號碼的小助手
+  const getPhoneNumber = (name: string) => {
+    const cloudContact = cloudContacts.find(c => c.name === name);
+    if (cloudContact && cloudContact.phone) return cloudContact.phone;
+    return phoneBook[name] || '';
+  };
+
+  // 一鍵複製號碼的小助手
+  const handleCopy = (phone: string) => {
+    navigator.clipboard.writeText(phone);
+    alert(`已複製代墊人號碼：${phone}\n請前往支付 App 進行轉帳！`);
+  };
+
   const eventDebts = useMemo(() => {
     const debtsByEvent: { [eventId: string]: any[] } = {};
 
@@ -67,9 +82,9 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
         const toPlayer = event.players.find(p => p.id === c.id);
 
         transactions.push({
-          eventId: event.id,          // ★ 記錄事件ID
-          eventName: event.eventName, // ★ 記錄事件名稱 (給搜尋結果顯示用)
-          eventDate: event.date,      // ★ 記錄事件日期 (給搜尋結果顯示用)
+          eventId: event.id,
+          eventName: event.eventName, 
+          eventDate: event.date,      
           fromId: d.id,
           toId: c.id,
           fromName: fromPlayer ? fromPlayer.name : d.id,
@@ -90,12 +105,10 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
     return debtsByEvent;
   }, [events]);
 
-  // ★ 全域搜尋邏輯：找出正在搜尋的人的「所有未付款項」
   const matchingDebtors = useMemo(() => {
     if (!searchQuery.trim()) return [];
     
     const allDebtsFlat = Object.values(eventDebts).flat();
-    // 只抓取「還沒付款」的帳目
     const unpaid = allDebtsFlat.filter(d => !paidStatus[d.uniqueKey]);
     
     const grouped: Record<string, any[]> = {};
@@ -114,9 +127,6 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
   }, [searchQuery, eventDebts, paidStatus]);
 
 
-  // ==========================================
-  // 視圖 2：單一活動的欠款明細 (點擊進入後 - Host 專用)
-  // ==========================================
   if (selectedEventId) {
     const event = events.find(e => e.id === selectedEventId);
     if (!event) return null;
@@ -225,15 +235,11 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
     );
   }
 
-  // ==========================================
-  // 視圖 1：首頁狀態 (自助查帳 + 歷史活動)
-  // ==========================================
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 mb-8 mt-2">
       
       {/* 🟢 第一層：球友自助查帳區 */}
       <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-6 rounded-[2rem] text-white shadow-md relative overflow-hidden">
-        {/* 背景裝飾 */}
         <div className="absolute -right-6 -top-6 text-white/10 rotate-12">
           <Wallet size={120} />
         </div>
@@ -260,7 +266,6 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
         </div>
       </div>
 
-      {/* 🔍 搜尋結果顯示區 */}
       {searchQuery.trim() !== '' && (
         <div className="mb-8 space-y-4 animate-in fade-in slide-in-from-top-2">
           {matchingDebtors.length > 0 ? (
@@ -271,16 +276,45 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
                  </div>
                  <h3 className="font-black text-slate-700 text-lg mb-4">{debtor.name} 的待付帳單</h3>
                  
-                 <div className="space-y-2">
-                   {debtor.details.map(d => (
-                     <div key={d.uniqueKey} className="bg-slate-50 p-3 rounded-2xl border border-slate-100 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-black text-slate-700">轉帳給 <span className="text-indigo-600">{d.toName}</span></p>
-                          <p className="text-[10px] font-bold text-slate-400 mt-0.5">{d.eventDate} | {d.eventName}</p>
-                        </div>
-                        <span className="font-black text-slate-700">${d.amount.toFixed(1)}</span>
-                     </div>
-                   ))}
+                 <div className="space-y-3">
+                   {debtor.details.map(d => {
+                     // ★ 取得代墊人電話
+                     const phone = getPhoneNumber(d.toName);
+                     
+                     return (
+                       <div key={d.uniqueKey} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-black text-slate-700 flex items-center gap-1">
+                              轉帳給 <span className="text-indigo-600">{d.toName}</span>
+                            </p>
+                            <span className="font-black text-slate-700">${d.amount.toFixed(1)}</span>
+                          </div>
+
+                          {/* ★ 電話號碼與複製按鈕 */}
+                          {phone ? (
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-sm font-bold text-slate-600 font-mono bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-sm">
+                                {phone}
+                              </span>
+                              <button
+                                onClick={() => handleCopy(phone)}
+                                className="flex items-center gap-1.5 bg-indigo-100 text-indigo-600 hover:bg-indigo-500 hover:text-white active:scale-95 transition-all px-3 py-1.5 rounded-lg border border-indigo-200 shadow-sm"
+                              >
+                                <Copy size={14} /> <span className="text-xs font-black">複製</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] font-bold text-amber-500 mt-1 bg-amber-50 px-2 py-1 rounded w-fit border border-amber-100">
+                              ⚠️ 系統無此代墊人號碼，請私下聯絡
+                            </p>
+                          )}
+
+                          <p className="text-[10px] font-bold text-slate-400 mt-1 pt-2 border-t border-slate-200/60">
+                            {d.eventDate} | {d.eventName}
+                          </p>
+                       </div>
+                     )
+                   })}
                  </div>
                  <div className="mt-4 pt-3 border-t border-slate-100 text-[10px] font-bold text-slate-400 flex items-center gap-1">
                     <AlertCircle size={12}/> 請盡快轉帳給代墊人，若已轉帳請通知 Host 打勾核銷！
@@ -298,7 +332,6 @@ export const Ledger: React.FC<Props> = ({ events, paidStatus, onTogglePaid }) =>
       )}
 
 
-      {/* 🔴 第二層：主辦人管理區 (活動列表) */}
       <div className="pt-2 border-t border-slate-200">
         <div className="flex items-center gap-2 mb-4 px-1">
           <Receipt size={18} className="text-slate-400" />

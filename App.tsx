@@ -138,12 +138,11 @@ export default function App() {
       const lines = data.rawRoster.split('\n');
       
       lines.forEach(line => {
-        // ★ 核心修復：只擷取開頭有「數字 + 點/頓號」的行數 (例如 "1.", "12、")
         if (/^\s*\d+[\.、]\s*/.test(line)) {
-          let cleanName = line.replace(/^\s*\d+[\.、]\s*/, ''); // 移除序號
-          cleanName = cleanName.replace(/[\(（\[【].*?[\)）\]】]/g, ''); // 移除括號與備註 (例如: (休假中))
-          cleanName = cleanName.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, ''); // 移除表情符號
-          cleanName = cleanName.replace(/[~^]+/g, ''); // 額外移除 ~^^ 這類常見顏文字符號
+          let cleanName = line.replace(/^\s*\d+[\.、]\s*/, ''); 
+          cleanName = cleanName.replace(/[\(（\[【].*?[\)）\]】]/g, ''); 
+          cleanName = cleanName.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, ''); 
+          cleanName = cleanName.replace(/[~^]+/g, ''); 
           cleanName = cleanName.trim();
           
           if (cleanName) {
@@ -218,8 +217,15 @@ export default function App() {
           </div>
         )}
 
+        {/* ★ 這裡將通訊錄傳遞給了 Ledger */}
         {activeTab === 'summary' && (
-          <Ledger events={store.events} paidStatus={store.paidStatus} onTogglePaid={handleTogglePaid} />
+          <Ledger 
+            events={store.events} 
+            paidStatus={store.paidStatus} 
+            onTogglePaid={handleTogglePaid} 
+            phoneBook={store.defaults.phoneBook} 
+            cloudContacts={cloudContacts} 
+          />
         )}
 
         {activeTab === 'hosts' && (
