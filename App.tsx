@@ -189,7 +189,7 @@ export default function App() {
     setStore(prev => ({ ...prev, events: prev.events.map(e => e.id === updatedEvent.id ? updatedEvent : e) })); 
   };
 
-  // 接龍解析引擎
+// 接龍解析引擎
   const handleCreateEvent = (data: { name: string, date: string, startTime: string, endTime: string, rawRoster: string }) => {
     const newId = generateId();
     const startHour = parseInt(data.startTime.split(':')[0], 10);
@@ -198,15 +198,30 @@ export default function App() {
     for (let i = startHour; i < endHour; i++) {
       autoSessions.push({ id: generateId(), name: `${i.toString().padStart(2, '0')}:00 - ${(i + 1).toString().padStart(2, '0')}:00`, cost: store.defaults.cost, hostId: 'Carol' });
     }
+    
     let initialPlayers: Player[] = [];
     if (data.rawRoster && data.rawRoster.trim() !== '') {
       data.rawRoster.split('\n').forEach(line => {
-        if (/^\s*\d+[\.、]\s*/.test(line)) {
-          let cleanName = line.replace(/^\s*\d+[\.、]\s*/, '').replace(/[\(（\[【].*?[\)）\]】]/g, '').replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').replace(/[~^]+/g, '').trim();
-          if (cleanName && !initialPlayers.find(p => p.name === cleanName)) initialPlayers.push({ id: generateId(), name: cleanName });
+        // ★ 升級後的規則：序號只能是 1-99，且點(.)後面不能緊接數字 (排除 4.25 等日期)
+        if (/^\s*([1-9][0-9]?)[\.、]\s*(?!\d)/.test(line)) {
+          let cleanName = line
+            .replace(/^\s*\d+[\.、]\s*/, '') // 移除前方的序號與點
+            .replace(/[\(（\[【].*?[\)）\]】]/g, '') // 移除括號內的備註
+            .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '') // 移除 Emoji
+            .replace(/[~^]+/g, '')
+            .trim();
+
+          // ★ 二次過濾：排除殘留的日期/時間字眼，或純數字
+          if (cleanName && !cleanName.includes('星期') && !cleanName.includes('月') && !/^[0-9:\-\/]+$/.test(cleanName)) {
+            // 確認沒有重複加入
+            if (!initialPlayers.find(p => p.name === cleanName)) {
+              initialPlayers.push({ id: generateId(), name: cleanName });
+            }
+          }
         }
       });
     }
+    
     const newEvent: EventData = { id: newId, date: data.date, eventName: data.name, defaultCost: store.defaults.cost, players: initialPlayers, sessions: autoSessions, participation: {} };
     setStore(prev => ({ ...prev, events: [newEvent, ...prev.events] }));
     setCurrentEventId(newId);
