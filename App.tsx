@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Settings, List, Receipt, Save, Crown, Clock, UserPlus, Calendar as CalendarIcon, ShieldCheck, Lock, Unlock, Search, Database, Download, Upload } from 'lucide-react';
+import { Settings, List, Receipt, Save, Crown, Clock, UserPlus, Calendar as CalendarIcon, ShieldCheck, Lock, Unlock, Search, Database, Download, Upload, MapPin, X, Plus } from 'lucide-react';
 import { EventWorkspace } from './components/EventWorkspace';
 import { EventList } from './components/EventList';
 import { Ledger } from './components/Ledger';
@@ -11,10 +11,11 @@ import { WeeklyHeatmap } from './components/WeeklyHeatmap';
 import { PLAYER_PHONE_BOOK } from './data/playerData';
 
 // 型別定義
+interface Venue { id: string; name: string; price: number; }
 interface Session { id: string; name: string; cost: number; hostId?: string; }
 interface Player { id: string; name: string; }
-interface EventData { id: string; date: string; eventName: string; defaultCost: number; players: Player[]; sessions: Session[]; participation?: { [key: string]: number }; }
-interface GlobalDefaults { cost: number; playerNames: string[]; sessionNames: string[]; phoneBook: { [name: string]: string }; }
+interface EventData { id: string; date: string; eventName: string; defaultCost: number; players: Player[]; sessions: Session[]; participation?: { [key: string]: number }; venueId?: string; }
+interface GlobalDefaults { cost: number; playerNames: string[]; sessionNames: string[]; phoneBook: { [name: string]: string }; venues: Venue[]; }
 interface GlobalState { events: EventData[]; defaults: GlobalDefaults; paidStatus: { [key: string]: boolean }; reportedStatus: { [key: string]: boolean }; }
 interface Contact { id: string; name: string; phone: string; }
 
@@ -22,10 +23,11 @@ export default function App() {
   const [store, setStore] = useState<GlobalState>({ 
     events: [],
     defaults: {
-      cost: 200,
+      cost: 200, // 保留舊屬性以防向下相容
       playerNames: ['Carol', 'Kei', 'Owen', 'Tao', 'Candice', 'Humberto', 'Abby', 'Elson', 'Miki', 'Jacob', 'Vanessa', 'Eddie', 'Iman', 'Herman', 'Fifi', 'Ka Ieng', 'Jimmy', 'Kit', 'Celia', 'Winnie', 'Pang', 'On' , 'Ricky'],
       sessionNames: ['15:00 - 16:00', '16:00 - 17:00'],
-      phoneBook: PLAYER_PHONE_BOOK
+      phoneBook: PLAYER_PHONE_BOOK,
+      venues: [{ id: 'v1', name: '望廈場地', price: 200 }] // ★ 預設新增望廈場地
     },
     paidStatus: {},
     reportedStatus: {} 
@@ -34,7 +36,7 @@ export default function App() {
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'events' | 'summary' | 'calendar' | 'hosts' | 'settings'>('events');
   const [isLoaded, setIsLoaded] = useState(false);
-  const [preventSave, setPreventSave] = useState(true); // ★ 防空燒安全鎖
+  const [preventSave, setPreventSave] = useState(true); 
   
   const [cloudContacts, setCloudContacts] = useState<Contact[]>([]);
   const USER_ID = 'Owen_User_001'; 
@@ -74,7 +76,7 @@ export default function App() {
     }
   }, [isLoaded]);
 
-  // ★ 載入資料邏輯 (包含本地影子備份還原)
+  // ★ 載入資料邏輯
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -85,27 +87,27 @@ export default function App() {
 
         if (data && data.data && data.data.events && data.data.events.length > 0) {
           finalData = data.data;
-          console.log("✅ 成功從雲端讀取資料");
         } else {
-          // 如果雲端是空的，嘗試從本地瀏覽器抓取影子備份
           const localBackup = localStorage.getItem('volley_shadow_backup');
           if (localBackup) {
             finalData = JSON.parse(localBackup);
-            console.log("🔄 雲端為空，已成功從本地影子備份還原資料！");
           }
         }
 
         if (finalData) {
           if (!finalData.defaults.phoneBook) finalData.defaults.phoneBook = PLAYER_PHONE_BOOK;
           if (!finalData.reportedStatus) finalData.reportedStatus = {}; 
+          // ★ 資料防呆：如果舊資料沒有 venues，自動幫忙加上
+          if (!finalData.defaults.venues || finalData.defaults.venues.length === 0) {
+            finalData.defaults.venues = [{ id: 'v1', name: '望廈場地', price: finalData.defaults.cost || 200 }];
+          }
           setStore(finalData);
         }
 
         await fetchCloudContacts();
-        setPreventSave(false); // ★ 讀取流程順利完成，解開存檔鎖
+        setPreventSave(false); 
       } catch (e) { 
         console.error('❌ SYNC ERROR 讀取失敗:', e); 
-        // 讀取失敗時，嘗試使用本地備份，但保持 preventSave = true 防止覆寫雲端
         const localBackup = localStorage.getItem('volley_shadow_backup');
         if (localBackup) {
           setStore(JSON.parse(localBackup));
@@ -118,23 +120,17 @@ export default function App() {
     loadData();
   }, []);
 
-  // ★ 存檔邏輯 (包含雲端存檔與本地影子備份)
+  // ★ 存檔邏輯
   useEffect(() => {
     const saveData = async () => {
-      // 只有在「解鎖 (preventSave: false)」且「活動數量 > 0」時，才允許覆寫雲端
       if (isLoaded && !preventSave && store.events.length > 0) {
-        // 1. 存入雲端
         await supabase.from('volley_events').upsert({ user_id: USER_ID, data: store, updated_at: new Date() }, { onConflict: 'user_id' });
-        // 2. 存入本地影子備份 (防空燒保險)
         localStorage.setItem('volley_shadow_backup', JSON.stringify(store));
-      } else if (isLoaded && store.events.length === 0 && !preventSave) {
-        console.warn("⚠️ 偵測到名單為空，攔截雲端覆寫，以保護歷史數據！");
       }
     };
     saveData();
   }, [store, isLoaded, preventSave]);
 
-  // ★ 手動備份匯出 (下載 JSON)
   const handleExportBackup = () => {
     const dataStr = JSON.stringify(store, null, 2);
     const blob = new Blob([dataStr], { type: 'application/json' });
@@ -148,7 +144,6 @@ export default function App() {
     document.body.removeChild(link);
   };
 
-  // ★ 手動備份還原 (上傳 JSON)
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleImportBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -161,8 +156,7 @@ export default function App() {
         if (importedData && importedData.events) {
           if (window.confirm("⚠️ 警告：這將會用備份檔覆蓋目前的全部資料！確定要還原嗎？")) {
             setStore(importedData);
-            setPreventSave(false); // 允許這份新資料存上雲端
-            // 強制覆寫雲端
+            setPreventSave(false); 
             await supabase.from('volley_events').upsert({ user_id: USER_ID, data: importedData, updated_at: new Date() }, { onConflict: 'user_id' });
             localStorage.setItem('volley_shadow_backup', JSON.stringify(importedData));
             alert("✅ 資料還原成功！並已同步至雲端。");
@@ -175,10 +169,9 @@ export default function App() {
       }
     };
     reader.readAsText(file);
-    if (fileInputRef.current) fileInputRef.current.value = ''; // 重置 input
+    if (fileInputRef.current) fileInputRef.current.value = ''; 
   };
 
-  // 帳單與報數狀態管理
   const handleTogglePaid = (key: string) => { 
     setStore(prev => ({ ...prev, paidStatus: { ...prev.paidStatus, [key]: !prev.paidStatus[key] }, reportedStatus: { ...prev.reportedStatus, [key]: false } })); 
   };
@@ -189,31 +182,38 @@ export default function App() {
     setStore(prev => ({ ...prev, events: prev.events.map(e => e.id === updatedEvent.id ? updatedEvent : e) })); 
   };
 
-// 接龍解析引擎
-  const handleCreateEvent = (data: { name: string, date: string, startTime: string, endTime: string, rawRoster: string }) => {
+  // ★ 更新場地的方法
+  const handleUpdateVenues = (newVenues: Venue[]) => {
+    setStore(prev => ({ ...prev, defaults: { ...prev.defaults, venues: newVenues } }));
+  };
+
+  // ★ 接龍解析引擎 (加入 venueId 支援)
+  const handleCreateEvent = (data: { name: string, date: string, startTime: string, endTime: string, rawRoster: string, venueId?: string }) => {
     const newId = generateId();
+    // 尋找選擇的場地，如果沒選或找不到，預設用清單裡的第一個場地
+    const selectedVenue = store.defaults.venues.find(v => v.id === data.venueId) || store.defaults.venues[0];
+    const currentCost = selectedVenue.price;
+
     const startHour = parseInt(data.startTime.split(':')[0], 10);
     const endHour = parseInt(data.endTime.split(':')[0], 10);
     const autoSessions = [];
     for (let i = startHour; i < endHour; i++) {
-      autoSessions.push({ id: generateId(), name: `${i.toString().padStart(2, '0')}:00 - ${(i + 1).toString().padStart(2, '0')}:00`, cost: store.defaults.cost, hostId: 'Carol' });
+      // 這裡直接套用選定場地的價格
+      autoSessions.push({ id: generateId(), name: `${i.toString().padStart(2, '0')}:00 - ${(i + 1).toString().padStart(2, '0')}:00`, cost: currentCost, hostId: 'Carol' });
     }
     
     let initialPlayers: Player[] = [];
     if (data.rawRoster && data.rawRoster.trim() !== '') {
       data.rawRoster.split('\n').forEach(line => {
-        // ★ 升級後的規則：序號只能是 1-99，且點(.)後面不能緊接數字 (排除 4.25 等日期)
         if (/^\s*([1-9][0-9]?)[\.、]\s*(?!\d)/.test(line)) {
           let cleanName = line
-            .replace(/^\s*\d+[\.、]\s*/, '') // 移除前方的序號與點
-            .replace(/[\(（\[【].*?[\)）\]】]/g, '') // 移除括號內的備註
-            .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '') // 移除 Emoji
+            .replace(/^\s*\d+[\.、]\s*/, '') 
+            .replace(/[\(（\[【].*?[\)）\]】]/g, '') 
+            .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '') 
             .replace(/[~^]+/g, '')
             .trim();
 
-          // ★ 二次過濾：排除殘留的日期/時間字眼，或純數字
           if (cleanName && !cleanName.includes('星期') && !cleanName.includes('月') && !/^[0-9:\-\/]+$/.test(cleanName)) {
-            // 確認沒有重複加入
             if (!initialPlayers.find(p => p.name === cleanName)) {
               initialPlayers.push({ id: generateId(), name: cleanName });
             }
@@ -222,7 +222,8 @@ export default function App() {
       });
     }
     
-    const newEvent: EventData = { id: newId, date: data.date, eventName: data.name, defaultCost: store.defaults.cost, players: initialPlayers, sessions: autoSessions, participation: {} };
+    // 將 venueId 一併存入 EventData 中
+    const newEvent: EventData = { id: newId, date: data.date, eventName: data.name, venueId: selectedVenue.id, defaultCost: currentCost, players: initialPlayers, sessions: autoSessions, participation: {} };
     setStore(prev => ({ ...prev, events: [newEvent, ...prev.events] }));
     setCurrentEventId(newId);
   };
@@ -234,7 +235,8 @@ export default function App() {
     if (!event) return null;
     return (
       <div className="max-w-3xl mx-auto p-4">
-        <EventWorkspace event={event} onUpdate={handleUpdateEvent} onBack={() => setCurrentEventId(null)} onDelete={() => { setStore(prev => ({ ...prev, events: prev.events.filter(e => e.id !== currentEventId) })); setCurrentEventId(null); }} phoneBook={store.defaults.phoneBook} cloudContacts={cloudContacts} />
+        {/* 將 venues 傳遞給 Workspace 以便在裡面隨時修改場地 */}
+        <EventWorkspace event={event} onUpdate={handleUpdateEvent} onBack={() => setCurrentEventId(null)} onDelete={() => { setStore(prev => ({ ...prev, events: prev.events.filter(e => e.id !== currentEventId) })); setCurrentEventId(null); }} phoneBook={store.defaults.phoneBook} cloudContacts={cloudContacts} venues={store.defaults.venues} />
       </div>
     );
   }
@@ -254,20 +256,12 @@ export default function App() {
       </header>
 
       <main className="max-w-3xl mx-auto p-4">
-        {activeTab === 'events' && <div className="space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-500"><EventList events={store.events} onSelectEvent={setCurrentEventId} onCreateEvent={handleCreateEvent} /></div>}
+        {/* 將 venues 傳遞給 EventList 以便在新增活動時產生下拉選單 */}
+        {activeTab === 'events' && <div className="space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-500"><EventList events={store.events} onSelectEvent={setCurrentEventId} onCreateEvent={handleCreateEvent} venues={store.defaults.venues} /></div>}
         {activeTab === 'calendar' && <div className="animate-in fade-in slide-in-from-bottom-4 duration-500"><WeeklyHeatmap events={store.events} /></div>}
         
-        {/* Ledger */}
         {activeTab === 'summary' && (
-          <Ledger 
-            events={store.events} 
-            paidStatus={store.paidStatus} 
-            reportedStatus={store.reportedStatus} 
-            onTogglePaid={handleTogglePaid} 
-            onReportPaid={handleReportPaid} 
-            phoneBook={store.defaults.phoneBook} 
-            cloudContacts={cloudContacts} 
-          />
+          <Ledger events={store.events} paidStatus={store.paidStatus} reportedStatus={store.reportedStatus} onTogglePaid={handleTogglePaid} onReportPaid={handleReportPaid} phoneBook={store.defaults.phoneBook} cloudContacts={cloudContacts} />
         )}
         
         {activeTab === 'hosts' && <ContactManager contacts={cloudContacts} onRefresh={fetchCloudContacts} userId={USER_ID} />}
@@ -275,6 +269,57 @@ export default function App() {
         {activeTab === 'settings' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
              
+             {/* ★ 全新場地管理區塊 (取代舊的單一租金設定) */}
+             <section className="bg-white rounded-[2rem] border border-slate-200 p-5 shadow-sm">
+                <span className="font-black text-slate-700 text-sm flex items-center gap-2 mb-4">
+                  <MapPin size={18} className="text-blue-500" /> 場地與每小時租金管理
+                </span>
+                <div className="space-y-3">
+                  {store.defaults.venues.map((venue) => (
+                    <div key={venue.id} className="flex items-center gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                      <input 
+                        type="text" 
+                        value={venue.name} 
+                        onChange={(e) => {
+                          const newList = store.defaults.venues.map(v => v.id === venue.id ? { ...v, name: e.target.value } : v);
+                          handleUpdateVenues(newList);
+                        }}
+                        className="flex-1 bg-transparent font-bold text-slate-700 outline-none w-full"
+                        placeholder="場地名稱"
+                      />
+                      <div className="flex items-center bg-white px-3 py-1.5 rounded-xl border border-slate-200 shrink-0 shadow-sm">
+                        <span className="text-slate-400 text-xs font-black mr-1">$</span>
+                        <input 
+                          type="number" 
+                          value={venue.price} 
+                          onChange={(e) => {
+                            const newList = store.defaults.venues.map(v => v.id === venue.id ? { ...v, price: Number(e.target.value) } : v);
+                            handleUpdateVenues(newList);
+                          }}
+                          className="w-12 bg-transparent font-black text-blue-600 outline-none text-right"
+                        />
+                      </div>
+                      <button 
+                        onClick={() => {
+                          if (store.defaults.venues.length > 1) {
+                            handleUpdateVenues(store.defaults.venues.filter(v => v.id !== venue.id));
+                          } else {
+                            alert('至少需要保留一個預設場地喔！');
+                          }
+                        }}
+                        className={`p-2 transition-colors ${store.defaults.venues.length > 1 ? 'text-red-300 hover:text-red-500 active:scale-95' : 'text-slate-200 cursor-not-allowed'}`}
+                      ><X size={18} /></button>
+                    </div>
+                  ))}
+                  <button 
+                    onClick={() => handleUpdateVenues([...store.defaults.venues, { id: generateId(), name: '新場地', price: 200 }])}
+                    className="w-full py-3 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 font-black text-xs hover:bg-slate-50 hover:text-blue-500 hover:border-blue-200 transition-all flex items-center justify-center gap-2 mt-2 active:scale-95"
+                  >
+                    <Plus size={14} /> 新增場地
+                  </button>
+                </div>
+             </section>
+
              {/* 資料安全備份區塊 */}
              <section className="bg-white rounded-[2rem] border border-blue-200 p-5 shadow-sm shadow-blue-100 overflow-hidden relative">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
@@ -286,23 +331,10 @@ export default function App() {
                     除了雲端同步，強烈建議定期點擊匯出備份，保存至群組。若發生意外，可隨時還原包含「打球時數」的完整歷史紀錄。
                   </p>
                   <div className="flex gap-3">
-                    <button 
-                      onClick={handleExportBackup} 
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-3 px-4 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-md shadow-blue-200"
-                    >
-                      <Download size={18} /> 匯出備份檔
-                    </button>
-                    <label className="flex-1 bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:scale-95 text-slate-700 py-3 px-4 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm">
-                      <Upload size={18} className="text-slate-400" /> 還原資料
-                      <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleImportBackup} />
-                    </label>
+                    <button onClick={handleExportBackup} className="flex-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-3 px-4 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-md shadow-blue-200"><Download size={18} /> 匯出備份檔</button>
+                    <label className="flex-1 bg-white border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:scale-95 text-slate-700 py-3 px-4 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"><Upload size={18} className="text-slate-400" /> 還原資料<input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleImportBackup} /></label>
                   </div>
                 </div>
-             </section>
-
-             <section className="bg-white rounded-[2rem] border border-slate-200 p-5 shadow-sm">
-                <span className="font-black text-slate-700 text-sm block">預設場租費用</span>
-                <input type="number" value={store.defaults.cost} onChange={(e) => setStore(prev => ({ ...prev, defaults: { ...prev.defaults, cost: Number(e.target.value) } }))} className="w-full bg-slate-50 mt-2 p-3 rounded-xl font-black text-blue-900 outline-none" />
              </section>
 
              <section className="bg-white rounded-[2rem] border border-slate-200 p-5 shadow-sm">

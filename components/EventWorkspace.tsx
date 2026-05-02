@@ -2,16 +2,24 @@ import React, { useState, useRef, useEffect } from 'react';
 import { EventData, Session } from '../types';
 import { MatrixGrid } from './MatrixGrid';
 import { SummaryCard } from './SummaryCard';
-import { ArrowLeft, Trash2, Clock, UserPlus, X, Check, ArrowUp, Users, Edit2 } from 'lucide-react';
+import { ArrowLeft, Trash2, Clock, UserPlus, X, Check, ArrowUp, Users, Edit2, MapPin } from 'lucide-react';
 import { TeamGenerator } from './TeamGenerator';
 
+// ★ 新增 Venue 介面定義
+interface Venue {
+  id: string;
+  name: string;
+  price: number;
+}
+
 interface Props {
-  event: EventData;
+  event: EventData & { venueId?: string }; // 確保支援 venueId
   onUpdate: (event: EventData) => void;
   onBack: () => void;
   onDelete: () => void;
   phoneBook: { [name: string]: string }; 
   cloudContacts: { id: string; name: string; phone: string }[];
+  venues: Venue[]; // ★ 接收從 App.tsx 傳來的 venues
 }
 
 const Modal = ({ 
@@ -55,13 +63,12 @@ const Modal = ({
   );
 };
 
-export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDelete, phoneBook, cloudContacts }) => {
+export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDelete, phoneBook, cloudContacts, venues }) => {
   const [modalType, setModalType] = useState<'add-session' | 'add-player' | 'delete-session' | 'delete-player' | 'delete-event' | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [targetId, setTargetId] = useState<string | null>(null);
   const [showTeamGenerator, setShowTeamGenerator] = useState(false);
 
-  // ★ 新增：標題編輯狀態
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState("");
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -90,7 +97,6 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
     onUpdate({ ...event, participation: newParticipation });
   };
 
-  // ★ 新增：儲存編輯後的標題
   const saveTitle = () => {
     if (editTitleValue.trim()) {
       onUpdate({ ...event, eventName: editTitleValue.trim() });
@@ -98,13 +104,27 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
     setIsEditingTitle(false);
   };
 
-  // ★ 焦點自動定位到編輯框並全選
   useEffect(() => {
     if (isEditingTitle && editInputRef.current) {
       editInputRef.current.focus();
       editInputRef.current.select();
     }
   }, [isEditingTitle]);
+
+  // ★ 新增：切換場地邏輯
+  const handleVenueChange = (newVenueId: string) => {
+    const selectedVenue = venues.find(v => v.id === newVenueId);
+    if (!selectedVenue) return;
+
+    const updatedEvent = {
+      ...event,
+      venueId: newVenueId,
+      defaultCost: selectedVenue.price,
+      // 自動把現有所有時段的價錢都更新成新場地的價錢
+      sessions: event.sessions.map((s: any) => ({ ...s, cost: selectedVenue.price }))
+    };
+    onUpdate(updatedEvent);
+  };
 
   const handleSubmit = () => {
     if (modalType === 'add-session') {
@@ -177,7 +197,6 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
       </div>
 
       <header className="pt-2">
-        {/* ★ 可點擊編輯的標題區塊 */}
         {isEditingTitle ? (
           <div className="flex items-center gap-2 mb-1 animate-in fade-in duration-200">
             <input 
@@ -206,7 +225,24 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
             </div>
           </div>
         )}
-        <p className="text-slate-400 font-bold">{event.date}</p>
+        
+        {/* ★ 新增：日期與場地切換區塊 */}
+        <div className="flex items-center flex-wrap gap-3 mt-2">
+          <p className="text-slate-400 font-bold">{event.date}</p>
+          <div className="w-1 h-1 rounded-full bg-slate-300"></div>
+          <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2 py-1 rounded-lg border border-blue-100/50">
+            <MapPin size={14} />
+            <select 
+              value={event.venueId || (venues.length > 0 ? venues[0].id : '')}
+              onChange={e => handleVenueChange(e.target.value)}
+              className="bg-transparent text-xs font-black outline-none border-none cursor-pointer appearance-none pr-4 relative"
+            >
+              {venues.map(v => (
+                <option key={v.id} value={v.id}>{v.name} (${v.price}/hr)</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </header>
 
       <div className="grid grid-cols-3 gap-3">

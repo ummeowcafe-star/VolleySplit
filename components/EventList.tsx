@@ -1,5 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronRight, Users, Plus, X, Calendar, FileText, Clock, MessageCircle, Sparkles } from 'lucide-react';
+import { ChevronRight, Users, Plus, X, Calendar, FileText, Clock, MessageCircle, Sparkles, MapPin } from 'lucide-react';
+
+// ★ 新增 Venue 介面
+interface Venue {
+  id: string;
+  name: string;
+  price: number;
+}
 
 interface Event {
   id: string;
@@ -8,20 +15,23 @@ interface Event {
   players: any[];
 }
 
+// ★ 更新 Props 介面：接收 venues 陣列，並在 onCreateEvent 中傳遞 venueId
 interface EventListProps {
   events: Event[];
+  venues: Venue[]; 
   onSelectEvent: (id: string) => void;
-  onCreateEvent: (data: { name: string, date: string, startTime: string, endTime: string, rawRoster: string }) => void;
+  onCreateEvent: (data: { name: string, date: string, startTime: string, endTime: string, rawRoster: string, venueId: string }) => void;
 }
 
-export function EventList({ events, onSelectEvent, onCreateEvent }: EventListProps) {
+export function EventList({ events, venues, onSelectEvent, onCreateEvent }: EventListProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     name: '',
     startTime: '16:00',
     endTime: '17:00',
-    rawRoster: '' 
+    rawRoster: '',
+    venueId: venues.length > 0 ? venues[0].id : '' // ★ 預設選擇第一個場地
   });
 
   const sortedEvents = [...events].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -45,7 +55,8 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
       name: `Volleyball ${today}`,
       startTime: '16:00',
       endTime: '17:00',
-      rawRoster: '' 
+      rawRoster: '',
+      venueId: venues.length > 0 ? venues[0].id : '' // ★ 打開時重置為預設場地
     });
     setIsModalOpen(true);
   };
@@ -69,14 +80,12 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
     if (formData.rawRoster.trim() !== '') {
       const text = formData.rawRoster;
       
-      // ★ 全局搜索時間 (不管它在哪一行)
       const timeMatch = text.match(/(\d{1,2}:\d{2})\s*(?:-|至|~)\s*(\d{1,2}:\d{2})/);
       if (timeMatch) {
         finalStartTime = timeMatch[1].padStart(5, '0');
         finalEndTime = timeMatch[2].padStart(5, '0');
       }
 
-      // ★ 全局搜索日期 (例如 4.19 或 4月19)
       const dateMatch = text.match(/(\d{1,2})[\.\/月](\d{1,2})/);
       if (dateMatch) {
         const year = new Date().getFullYear();
@@ -94,12 +103,14 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
       return;
     }
 
+    // ★ 送出時加上 venueId
     onCreateEvent({
       name: finalName,
       date: finalDate,
       startTime: finalStartTime,
       endTime: finalEndTime,
-      rawRoster: formData.rawRoster
+      rawRoster: formData.rawRoster,
+      venueId: formData.venueId 
     });
     
     setIsModalOpen(false);
@@ -221,6 +232,22 @@ export function EventList({ events, onSelectEvent, onCreateEvent }: EventListPro
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold text-slate-700 text-sm truncate" 
                     />
                   </div>
+                </div>
+
+                {/* ★ 新增：選擇場地 */}
+                <div>
+                  <label className="block text-[10px] font-black text-blue-400 uppercase mb-1.5 ml-1 flex items-center gap-1">
+                    <MapPin size={12}/> 選擇場地
+                  </label>
+                  <select 
+                    value={formData.venueId}
+                    onChange={e => setFormData({ ...formData, venueId: e.target.value })}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-600 outline-none font-bold text-slate-700 text-sm appearance-none"
+                  >
+                    {venues.map(v => (
+                      <option key={v.id} value={v.id}>{v.name} (${v.price}/hr)</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
