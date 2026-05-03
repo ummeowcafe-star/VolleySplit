@@ -66,6 +66,11 @@ export default function App() {
     if (!error && data) setCloudContacts(data);
   };
 
+  // ★ 新增：每次切換分頁或進出活動時，自動捲動回最頂端
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [activeTab, currentEventId]);
+
   useEffect(() => {
     if (isLoaded) {
       const splash = document.getElementById('splash-screen');
@@ -230,13 +235,30 @@ export default function App() {
 
   if (!isLoaded) return null;
 
-  if (currentEventId) {
+if (currentEventId) {
     const event = store.events.find(e => e.id === currentEventId);
     if (!event) return null;
     return (
       <div className="max-w-3xl mx-auto p-4">
-        {/* 將 venues 傳遞給 Workspace 以便在裡面隨時修改場地 */}
-        <EventWorkspace event={event} onUpdate={handleUpdateEvent} onBack={() => setCurrentEventId(null)} onDelete={() => { setStore(prev => ({ ...prev, events: prev.events.filter(e => e.id !== currentEventId) })); setCurrentEventId(null); }} phoneBook={store.defaults.phoneBook} cloudContacts={cloudContacts} venues={store.defaults.venues} />
+        {/* ★ 關鍵修正：補上缺失的 4 個帳單連動參數 */}
+        <EventWorkspace 
+          event={event} 
+          onUpdate={handleUpdateEvent} 
+          onBack={() => setCurrentEventId(null)} 
+          onDelete={() => { 
+            setStore(prev => ({ ...prev, events: prev.events.filter(e => e.id !== currentEventId) })); 
+            setCurrentEventId(null); 
+          }} 
+          phoneBook={store.defaults.phoneBook} 
+          cloudContacts={cloudContacts} 
+          venues={store.defaults.venues}
+          // --- 以下是這次漏掉的連動參數 ---
+          paidStatus={store.paidStatus}
+          reportedStatus={store.reportedStatus}
+          onTogglePaid={handleTogglePaid}
+          onReportPaid={handleReportPaid}
+          // ----------------------------
+        />
       </div>
     );
   }

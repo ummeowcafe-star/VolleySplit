@@ -5,7 +5,6 @@ import { SummaryCard } from './SummaryCard';
 import { ArrowLeft, Trash2, Clock, UserPlus, X, Check, ArrowUp, Users, Edit2, MapPin } from 'lucide-react';
 import { TeamGenerator } from './TeamGenerator';
 
-// ★ 新增 Venue 介面定義
 interface Venue {
   id: string;
   name: string;
@@ -13,13 +12,17 @@ interface Venue {
 }
 
 interface Props {
-  event: EventData & { venueId?: string }; // 確保支援 venueId
+  event: EventData & { venueId?: string };
   onUpdate: (event: EventData) => void;
   onBack: () => void;
   onDelete: () => void;
   phoneBook: { [name: string]: string }; 
   cloudContacts: { id: string; name: string; phone: string }[];
-  venues: Venue[]; // ★ 接收從 App.tsx 傳來的 venues
+  venues: Venue[]; 
+  paidStatus: { [key: string]: boolean };
+  reportedStatus: { [key: string]: boolean };
+  onTogglePaid: (key: string) => void;
+  onReportPaid: (key: string) => void;
 }
 
 const Modal = ({ 
@@ -63,7 +66,11 @@ const Modal = ({
   );
 };
 
-export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDelete, phoneBook, cloudContacts, venues }) => {
+// ★ 關鍵修正處 1：確保參數列裡面有接收到這四個狀態
+export const EventWorkspace: React.FC<Props> = ({ 
+  event, onUpdate, onBack, onDelete, phoneBook, cloudContacts, venues, 
+  paidStatus, reportedStatus, onTogglePaid, onReportPaid 
+}) => {
   const [modalType, setModalType] = useState<'add-session' | 'add-player' | 'delete-session' | 'delete-player' | 'delete-event' | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [targetId, setTargetId] = useState<string | null>(null);
@@ -111,7 +118,6 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
     }
   }, [isEditingTitle]);
 
-  // ★ 新增：切換場地邏輯
   const handleVenueChange = (newVenueId: string) => {
     const selectedVenue = venues.find(v => v.id === newVenueId);
     if (!selectedVenue) return;
@@ -120,7 +126,6 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
       ...event,
       venueId: newVenueId,
       defaultCost: selectedVenue.price,
-      // 自動把現有所有時段的價錢都更新成新場地的價錢
       sessions: event.sessions.map((s: any) => ({ ...s, cost: selectedVenue.price }))
     };
     onUpdate(updatedEvent);
@@ -226,18 +231,17 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
           </div>
         )}
         
-        {/* ★ 新增：日期與場地切換區塊 */}
         <div className="flex items-center flex-wrap gap-3 mt-2">
           <p className="text-slate-400 font-bold">{event.date}</p>
           <div className="w-1 h-1 rounded-full bg-slate-300"></div>
           <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2 py-1 rounded-lg border border-blue-100/50">
             <MapPin size={14} />
             <select 
-              value={event.venueId || (venues.length > 0 ? venues[0].id : '')}
+              value={event.venueId || (venues && venues.length > 0 ? venues[0].id : '')}
               onChange={e => handleVenueChange(e.target.value)}
               className="bg-transparent text-xs font-black outline-none border-none cursor-pointer appearance-none pr-4 relative"
             >
-              {venues.map(v => (
+              {venues && venues.map(v => (
                 <option key={v.id} value={v.id}>{v.name} (${v.price}/hr)</option>
               ))}
             </select>
@@ -268,10 +272,15 @@ export const EventWorkspace: React.FC<Props> = ({ event, onUpdate, onBack, onDel
         onReorderSessions={(newSessions) => onUpdate({ ...event, sessions: newSessions })}
       />
       
+      {/* ★ 關鍵修正處 2：把參數順利接棒傳給 SummaryCard */}
       <SummaryCard 
         event={event} 
         phoneBook={phoneBook} 
         cloudContacts={cloudContacts} 
+        paidStatus={paidStatus}
+        reportedStatus={reportedStatus}
+        onTogglePaid={onTogglePaid}
+        onReportPaid={onReportPaid}
       />
 
        {showTeamGenerator && (

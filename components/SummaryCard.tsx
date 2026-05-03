@@ -5,9 +5,23 @@ interface SummaryCardProps {
   event: any;
   phoneBook: { [name: string]: string }; 
   cloudContacts: { id: string; name: string; phone: string }[]; 
+  // ★ 加上問號 (?) 允許為空值
+  paidStatus?: { [key: string]: boolean };
+  reportedStatus?: { [key: string]: boolean };
+  onTogglePaid: (key: string) => void;
+  onReportPaid: (key: string) => void;
 }
 
-export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProps) {
+export function SummaryCard({ 
+  event, 
+  phoneBook, 
+  cloudContacts, 
+  paidStatus = {},     // ★ 防呆機制：如果是空值，預設為空物件
+  reportedStatus = {}, // ★ 防呆機制：如果是空值，預設為空物件
+  onTogglePaid, 
+  onReportPaid 
+}: SummaryCardProps) {
+  
   const safePhoneBook = phoneBook || {}; 
   const safeCloudContacts = cloudContacts || [];
 
@@ -21,13 +35,11 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
     if (!name) return null;
     const searchName = name.trim().toLowerCase();
     
-    // 1. 優先從雲端搜尋 (Cloud-first)
     const cloudMatch = safeCloudContacts.find(c => c.name.trim().toLowerCase() === searchName);
     if (cloudMatch && cloudMatch.phone && cloudMatch.phone.toLowerCase() !== 'unknown' && cloudMatch.phone.trim() !== '') {
       return cloudMatch.phone;
     }
     
-    // 2. 次要搜尋本地硬編碼名單
     const localPhone = safePhoneBook[name]; 
     if (localPhone && localPhone.toLowerCase() !== 'unknown' && localPhone.trim() !== '') {
       return localPhone;
@@ -38,7 +50,6 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
   const balances: { [playerId: string]: number } = {};
   event.players.forEach((p: any) => { balances[p.id] = 0; });
 
-  // 計算代付金額
   event.sessions.forEach((session: any) => {
     if (session.hostId) {
       let targetId = session.hostId;
@@ -49,7 +60,6 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
     }
   });
 
-  // 分攤場地費
   event.sessions.forEach((session: any) => {
     const participants = event.players.filter((p: any) => (event.participation?.[`${session.id}_${p.id}`] || 0) > 0);
     const totalWeight = participants.reduce((sum: number, p: any) => sum + (event.participation?.[`${session.id}_${p.id}`] || 0), 0);
@@ -89,16 +99,21 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
   }
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const handleCopy = (key: string, phone: string) => {
+  
+  const handleCopy = (key: string, phone: string, paymentKey: string) => {
     if (!phone) return;
     navigator.clipboard.writeText(phone);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
+
+    // 10秒後自動觸發報數
+    setTimeout(() => {
+      onReportPaid(paymentKey);
+    }, 10000);
   };
 
   return (
     <section className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* 標題區塊 */}
       <div className="bg-blue-700 p-6 flex items-center justify-between text-white">
         <div className="flex items-center gap-3">
           <div className="bg-white/20 p-2.5 rounded-2xl"><DollarSign size={24} /></div>
@@ -120,26 +135,36 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
             const receiverName = getPlayerName(tx.to);
             const receiverPhone = findPhone(receiverName); 
             const uniqueKey = `tx-${idx}`;
+            
+            const paymentKey = `${event.id}_${tx.from}_${tx.to}`;
+            // ★ 安全讀取：因為上面已經給了預設值，這裡絕對不會報錯了
+            const isSettled = paidStatus[paymentKey] || reportedStatus[paymentKey];
+
             return (
-              <div key={idx} className="bg-slate-50 border border-slate-100 rounded-[1.5rem] p-4 flex flex-col gap-3 transition-all hover:bg-slate-100/50">
+              <div key={idx} className={`border rounded-[1.5rem] p-4 flex flex-col gap-3 transition-all ${isSettled ? 'bg-emerald-50/60 border-emerald-200 opacity-80' : 'bg-slate-50 border-slate-100 hover:bg-slate-100/50'}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="flex flex-col">
                       <span className="text-[8px] font-black text-slate-400 uppercase">From</span>
-                      <span className="font-black text-slate-700 text-sm">{getPlayerName(tx.from)}</span>
+                      <span className={`font-black text-sm ${isSettled ? 'text-emerald-700' : 'text-slate-700'}`}>{getPlayerName(tx.from)}</span>
                     </div>
-                    <ArrowRight size={14} className="text-blue-200" />
+                    <ArrowRight size={14} className={isSettled ? 'text-emerald-300' : 'text-blue-200'} />
                     <div className="flex flex-col">
-                      <span className="text-[8px] font-black text-blue-400 uppercase">To</span>
-                      <span className="font-black text-blue-900 text-sm">{receiverName}</span>
+                      <span className={`text-[8px] font-black uppercase ${isSettled ? 'text-emerald-500' : 'text-blue-400'}`}>To</span>
+                      <span className={`font-black text-sm ${isSettled ? 'text-emerald-900' : 'text-blue-900'}`}>{receiverName}</span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xl font-black text-blue-900 tracking-tighter">${tx.amount.toFixed(1)}</span>
+                  <div className="text-right flex flex-col items-end">
+                    <span className={`text-xl font-black tracking-tighter ${isSettled ? 'text-emerald-600' : 'text-blue-900'}`}>${tx.amount.toFixed(1)}</span>
+                    {isSettled && (
+                      <span className="text-[10px] font-black text-emerald-500 flex items-center gap-1 mt-0.5">
+                        <CheckCircle2 size={10} /> 已報數
+                      </span>
+                    )}
                   </div>
                 </div>
                 
-                <div className="flex items-center justify-between bg-white rounded-xl px-4 py-2 border border-blue-50 shadow-sm">
+                <div className={`flex items-center justify-between bg-white rounded-xl px-4 py-2 border shadow-sm ${isSettled ? 'border-emerald-100' : 'border-blue-50'}`}>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">轉帳電話:</span>
                     {receiverPhone ? (
@@ -150,9 +175,9 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
                   </div>
                   {receiverPhone && (
                     <button 
-                      onClick={() => handleCopy(uniqueKey, receiverPhone)} 
+                      onClick={() => handleCopy(uniqueKey, receiverPhone, paymentKey)} 
                       className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-black transition-all ${
-                        copiedKey === uniqueKey ? 'bg-emerald-500 text-white' : 'bg-blue-100 text-blue-700'
+                        copiedKey === uniqueKey ? 'bg-emerald-500 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                       }`}
                     >
                       {copiedKey === uniqueKey ? <Check size={12} /> : <Copy size={12} />}
@@ -166,7 +191,6 @@ export function SummaryCard({ event, phoneBook, cloudContacts }: SummaryCardProp
         )}
       </div>
 
-      {/* ★ 新增：收款人彙整區塊 */}
       {creditors.length > 0 && (
         <div className="px-6 pb-6 pt-2 border-t border-slate-100 mt-2">
           <div className="flex items-center gap-2 mb-3">

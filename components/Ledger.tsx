@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react'; // ★ 這裡補上了 useEffect
 import { EventData } from '../types';
 import { Receipt, CheckCircle2, Check, ArrowLeft, ChevronRight, AlertCircle, Calendar as CalendarIcon, Search, X, Wallet, Copy, Clock, Sparkles } from 'lucide-react';
 
@@ -15,6 +15,14 @@ interface Props {
 export const Ledger: React.FC<Props> = ({ events, paidStatus, reportedStatus, onTogglePaid, onReportPaid, phoneBook, cloudContacts }) => {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // ★ 新增：每次進入或退出單一活動帳單時，自動捲動回最頂端
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [selectedEventId]);
 
   const getPhoneNumber = (name: string) => {
     const cloudContact = cloudContacts.find(c => c.name === name);
