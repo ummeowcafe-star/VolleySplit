@@ -2,13 +2,22 @@ import React, { useState, useRef, useEffect } from 'react';
 import { EventData } from '../types';
 import { Trash2, X, Crown, GripVertical, GripHorizontal } from 'lucide-react';
 
+// ★ 新增 Venue 介面定義
+interface Venue {
+  id: string;
+  name: string;
+  price: number;
+}
+
 interface Props {
   event: EventData;
   cloudContacts: { id: string; name: string; phone: string }[];
+  venues: Venue[]; // ★ 新增：接收場地清單
   onWeightChange: (sessionId: string, playerId: string, weight: number) => void;
   onRemoveSession: (sessionId: string) => void;
   onRemovePlayer: (playerId: string) => void;
   onHostChange: (sessionId: string, hostId: string) => void;
+  onSessionCostChange: (sessionId: string, cost: number) => void; // ★ 新增：單一時段價錢更新
   onReorderPlayers?: (newPlayers: any[]) => void;
   onReorderSessions?: (newSessions: any[]) => void;
 }
@@ -16,10 +25,12 @@ interface Props {
 export const MatrixGrid: React.FC<Props> = ({ 
   event, 
   cloudContacts, 
+  venues, // ★ 解構接收
   onWeightChange, 
   onRemoveSession, 
   onRemovePlayer, 
   onHostChange,
+  onSessionCostChange, // ★ 解構接收
   onReorderPlayers,
   onReorderSessions
 }) => {
@@ -30,7 +41,6 @@ export const MatrixGrid: React.FC<Props> = ({
   stateRef.current = { event, dragInfo, onReorderPlayers, onReorderSessions };
 
   useEffect(() => {
-    // 只有在「拖曳中」才阻擋預設滾動，平時允許正常滑動
     const handleTouchMove = (e: TouchEvent) => {
       if (stateRef.current.dragInfo) {
         e.preventDefault(); 
@@ -143,7 +153,6 @@ export const MatrixGrid: React.FC<Props> = ({
       </div>
 
       <div className="overflow-x-auto no-scrollbar">
-        {/* ★ 核心修正：移除了 touch-pan-y，恢復橫向滑動 */}
         <table className="w-full text-sm text-left border-collapse">
           <thead>
             <tr className="bg-blue-50/50">
@@ -170,7 +179,17 @@ export const MatrixGrid: React.FC<Props> = ({
 
                     <span className="text-[10px] text-blue-400 uppercase tracking-tighter">Time</span>
                     <span className="text-xs whitespace-nowrap">{session.name}</span>
-                    <div className="text-[9px] font-bold text-blue-300">${session.cost}</div>
+                    
+                    {/* ★ 核心修改：將純文字價錢替換為下拉選單 */}
+                    <select 
+                      value={session.cost}
+                      onChange={(e) => onSessionCostChange(session.id, Number(e.target.value))}
+                      className="mt-0.5 w-[90%] text-[10px] font-black text-blue-600 bg-white border border-blue-200 rounded-lg py-1 px-1 outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer shadow-sm text-center"
+                    >
+                      {venues && venues.map(v => (
+                        <option key={v.id} value={v.price}>{v.name} (${v.price}/hr)</option>
+                      ))}
+                    </select>
                     
                     <div className="mt-2 w-full px-1">
                       <div className="flex items-center justify-center gap-1 mb-1">

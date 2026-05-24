@@ -263,11 +263,21 @@ export const EventWorkspace: React.FC<Props> = ({
 
       <MatrixGrid 
         event={event} 
-        cloudContacts={cloudContacts} 
+        cloudContacts={cloudContacts}
+        venues={venues} // ★ 新增第 1 行：把場地資料傳進去
         onWeightChange={handleWeightChange}
         onRemoveSession={id => { setTargetId(id); setModalType('delete-session'); }}
         onRemovePlayer={id => { setTargetId(id); setModalType('delete-player'); }}
         onHostChange={handleHostChange} 
+        onSessionCostChange={(sessionId, cost) => { // ★ 新增第 2 行：處理價錢獨立變更
+          const updatedEvent = {
+            ...event,
+            sessions: event.sessions.map((s: any) => 
+              s.id === sessionId ? { ...s, cost } : s
+            )
+          };
+          onUpdate(updatedEvent);
+        }}
         onReorderPlayers={(newPlayers) => onUpdate({ ...event, players: newPlayers })}
         onReorderSessions={(newSessions) => onUpdate({ ...event, sessions: newSessions })}
       />
