@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  Calendar, 
   DollarSign, 
   CheckCircle2, 
   Circle, 
@@ -11,7 +10,9 @@ import {
   Check,
   Clock,
   MinusCircle,
-  PlusCircle
+  PlusCircle,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 
 interface Player { id: string; name: string; }
@@ -47,10 +48,49 @@ export const CarolMode: React.FC<CarolModeProps> = ({
   onReportPaid,
   cloudContacts = []
 }) => {
-  const [expandedEventId, setExpandedEventId] = useState<string | null>(events[0]?.id || null);
+  // 1. 預設全部折疊收合 (預設不展開任何活動)
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // 1. 查找 ContactManager 中的 Contact 資料
+  // 本地持久化記錄：已結清的活動 ID 集合
+  const [settledEventIds, setSettledEventIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('carol_settled_events');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  // 切換活動結清狀態
+  const toggleSettledEvent = (eventId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // 防止觸發展開/折疊
+    setSettledEventIds(prev => {
+      const next = new Set(prev);
+      if (next.has(eventId)) {
+        next.delete(eventId);
+      } else {
+        next.add(eventId);
+      }
+      try {
+        localStorage.setItem('carol_settled_events', JSON.stringify(Array.from(next)));
+      } catch (err) {
+        console.error(err);
+      }
+      return next;
+    });
+  };
+
+  // 排序邏輯：未結清的活動在前，已結清的活動置底
+  const sortedEvents = [...events].sort((a, b) => {
+    const isSettledA = settledEventIds.has(a.id);
+    const isSettledB = settledEventIds.has(b.id);
+    if (isSettledA && !isSettledB) return 1;  // A 已結清 -> 往後排 (置底)
+    if (!isSettledA && isSettledB) return -1; // B 已結清 -> A 在前
+    return 0; // 保留原本日期順序
+  });
+
+  // 查找 ContactManager 中的 Contact 資料
   const resolveContact = (hostIdOrName?: string): { name: string; phone: string } => {
     if (!hostIdOrName) return { name: '未指定', phone: '' };
     const cleanKey = hostIdOrName.trim().toLowerCase();
@@ -68,7 +108,7 @@ export const CarolMode: React.FC<CarolModeProps> = ({
     return { name: hostIdOrName, phone: '' };
   };
 
-  // 2. 超強容錯 checkParticipation (相容多種 Key 格式)
+  // checkParticipation
   const isPlayerInSession = (event: EventData, player: Player, session: Session, sessionIndex: number): boolean => {
     if (!event.participation) return false;
     const p = event.participation;
@@ -99,7 +139,7 @@ export const CarolMode: React.FC<CarolModeProps> = ({
     return false;
   };
 
-  // 3. 計算時段人均費用
+  // 計算時段人均費用
   const getSessionCostPerHead = (event: EventData, session: Session, sessionIndex: number): number => {
     const activeCount = event.players.filter(p => isPlayerInSession(event, p, session, sessionIndex)).length;
     if (activeCount === 0) return 0;
@@ -107,7 +147,7 @@ export const CarolMode: React.FC<CarolModeProps> = ({
     return sessionCost / activeCount;
   };
 
-  // 4. 計算球員個人總費用
+  // 計算球員個人總費用
   const getPlayerTotalFee = (event: EventData, player: Player): number => {
     return event.sessions.reduce((sum, session, idx) => {
       if (isPlayerInSession(event, player, session, idx)) {
@@ -117,7 +157,7 @@ export const CarolMode: React.FC<CarolModeProps> = ({
     }, 0);
   };
 
-  // 5. 複製電話並自動標記為待確認
+  // 複製電話並自動標記為待確認
   const handleCopyPhone = (hostKey: string, phone: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!phone) return;
@@ -130,7 +170,7 @@ export const CarolMode: React.FC<CarolModeProps> = ({
     }
   };
 
-  // 6. 處理 Host 轉帳 Check List 狀態切換
+  // 處理 Host 轉帳 Check List 狀態切換
   const handleHostStatusClick = (hostKey: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const isPaid = paidStatus[hostKey];
@@ -147,7 +187,9 @@ export const CarolMode: React.FC<CarolModeProps> = ({
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300 max-w-4xl mx-auto">
-      {events.map((event) => {
+      {sortedEvents.map((event) => {
+        const isSettled = settledEventIds.has(event.id);
+
         // 全場向球員總應收（排除 Carol）
         let totalReceivable = 0;
         event.players.forEach(p => {
@@ -167,7 +209,6 @@ export const CarolMode: React.FC<CarolModeProps> = ({
           };
         } = {};
 
-        // (A) 計算 Host 代付場地費
         event.sessions.forEach((s, idx) => {
           const { name: hostName, phone: hostPhone } = resolveContact(s.hostId);
           
@@ -185,7 +226,6 @@ export const CarolMode: React.FC<CarolModeProps> = ({
           hostSummaryMap[hostName].sessions.push(s.name || `時段 ${idx + 1}`);
         });
 
-        // (B) 扣除 Host 的個人球費
         Object.keys(hostSummaryMap).forEach(hostName => {
           const hostPlayer = event.players.find(p => {
             if (p.name.trim().toLowerCase() === hostName.trim().toLowerCase()) return true;
@@ -203,7 +243,6 @@ export const CarolMode: React.FC<CarolModeProps> = ({
         const carolPersonalCost = carolAsPlayer ? getPlayerTotalFee(event, carolAsPlayer) : 0;
         const carolHostInfo = hostSummaryMap['Carol'] || hostSummaryMap['carol'] || { paidVenueCost: 0, personalCost: 0 };
 
-        // Carol 淨應補給其他 Host 的總額
         let totalCarolPayoutToHosts = 0;
         Object.entries(hostSummaryMap).forEach(([hostName, info]) => {
           if (hostName.toUpperCase() !== 'CAROL') {
@@ -219,7 +258,9 @@ export const CarolMode: React.FC<CarolModeProps> = ({
           <div 
             key={event.id} 
             className={`bg-white rounded-3xl border transition-all duration-300 overflow-hidden ${
-              isExpanded 
+              isSettled
+                ? 'opacity-60 border-slate-200 bg-slate-50/50'
+                : isExpanded 
                 ? 'border-indigo-200/80 shadow-lg shadow-indigo-100/50 ring-1 ring-indigo-500/10' 
                 : 'border-slate-200/80 hover:border-slate-300 shadow-sm hover:shadow-md'
             }`}
@@ -230,13 +271,35 @@ export const CarolMode: React.FC<CarolModeProps> = ({
               className="p-5 cursor-pointer hover:bg-slate-50/80 transition-colors flex items-center justify-between select-none"
             >
               <div className="flex items-center gap-3.5">
-                <div className={`p-3 rounded-2xl transition-colors ${
-                  isExpanded ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  <Calendar size={20} />
-                </div>
+                
+                {/* 核心改動：Checkbox 樣式按鈕 */}
+                <button
+                  onClick={(e) => toggleSettledEvent(event.id, e)}
+                  title={isSettled ? "點擊取消結清" : "點擊標記為已結清並置底"}
+                  className={`w-11 h-11 rounded-2xl transition-all duration-200 active:scale-90 flex items-center justify-center shrink-0 ${
+                    isSettled
+                      ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200'
+                      : 'bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 border border-slate-200/60'
+                  }`}
+                >
+                  {isSettled ? (
+                    <CheckCircle2 size={22} className="animate-in zoom-in-50" />
+                  ) : (
+                    <Circle size={20} className="stroke-[2.2]" />
+                  )}
+                </button>
+
                 <div>
-                  <h3 className="font-bold text-slate-800 text-base tracking-tight">{event.eventName}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className={`font-bold text-base tracking-tight ${isSettled ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                      {event.eventName}
+                    </h3>
+                    {isSettled && (
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-extrabold text-[10px]">
+                        已結清
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs font-semibold text-slate-400 mt-0.5">{event.date}</p>
                 </div>
               </div>
@@ -244,7 +307,9 @@ export const CarolMode: React.FC<CarolModeProps> = ({
               <div className="flex items-center gap-4">
                 <div className="text-right">
                   <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase block">全場向球員總應收 (不含CAROL)</span>
-                  <span className="font-extrabold text-lg text-indigo-600">${Math.round(totalReceivable)}</span>
+                  <span className={`font-extrabold text-lg ${isSettled ? 'text-slate-400' : 'text-indigo-600'}`}>
+                    ${Math.round(totalReceivable)}
+                  </span>
                 </div>
                 <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
                   {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
@@ -256,8 +321,12 @@ export const CarolMode: React.FC<CarolModeProps> = ({
             {isExpanded && (
               <div className="p-5 border-t border-slate-100 bg-slate-50/40 space-y-5">
                 
-                {/* Carol 本人統計看板 (藍紫漸變微光) */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-900 text-white p-5 rounded-2xl shadow-xl shadow-indigo-950/20 space-y-4">
+                {/* Carol 本人統計看板 */}
+                <div className={`relative overflow-hidden p-5 rounded-2xl shadow-xl transition-all space-y-4 ${
+                  isSettled
+                    ? 'bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 text-slate-200'
+                    : 'bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-900 text-white shadow-indigo-950/20'
+                }`}>
                   <div className="absolute -right-8 -top-8 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none" />
                   <div className="absolute right-12 -bottom-10 w-24 h-24 bg-blue-500/20 rounded-full blur-xl pointer-events-none" />
 
@@ -366,7 +435,7 @@ export const CarolMode: React.FC<CarolModeProps> = ({
                             </div>
                           </div>
 
-                          {/* 第二列：獨立時段專屬行 (獨立一行呈列) */}
+                          {/* 第二列：獨立時段專屬行 */}
                           {info.sessions.length > 0 && (
                             <div className="flex items-center gap-1.5 text-xs bg-slate-50/80 px-2.5 py-1.5 rounded-xl border border-slate-100/80">
                               <Clock size={12} className="text-slate-400 shrink-0" />
