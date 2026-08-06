@@ -66,7 +66,6 @@ const Modal = ({
   );
 };
 
-// ★ 關鍵修正處 1：確保參數列裡面有接收到這四個狀態
 export const EventWorkspace: React.FC<Props> = ({ 
   event, onUpdate, onBack, onDelete, phoneBook, cloudContacts, venues, 
   paidStatus, reportedStatus, onTogglePaid, onReportPaid 
@@ -101,6 +100,21 @@ export const EventWorkspace: React.FC<Props> = ({
     const key = `${sessionId}_${playerId}`;
     if (weight === 0) delete newParticipation[key];
     else newParticipation[key] = weight;
+    onUpdate({ ...event, participation: newParticipation });
+  };
+
+  // 🌟 修復全選問題的靈魂：一次性寫入整頁變更，解決 React 狀態覆蓋問題
+  const handleBatchWeightChange = (updates: { [key: string]: number }) => {
+    const newParticipation = { ...(event.participation || {}) };
+    
+    Object.entries(updates).forEach(([key, weight]) => {
+      if (weight === 0) {
+        delete newParticipation[key];
+      } else {
+        newParticipation[key] = weight;
+      }
+    });
+
     onUpdate({ ...event, participation: newParticipation });
   };
 
@@ -264,12 +278,13 @@ export const EventWorkspace: React.FC<Props> = ({
       <MatrixGrid 
         event={event} 
         cloudContacts={cloudContacts}
-        venues={venues} // ★ 新增第 1 行：把場地資料傳進去
+        venues={venues}
         onWeightChange={handleWeightChange}
+        onBatchWeightChange={handleBatchWeightChange} // 🌟 關鍵補上這行！傳入批次更新邏輯
         onRemoveSession={id => { setTargetId(id); setModalType('delete-session'); }}
         onRemovePlayer={id => { setTargetId(id); setModalType('delete-player'); }}
         onHostChange={handleHostChange} 
-        onSessionCostChange={(sessionId, cost) => { // ★ 新增第 2 行：處理價錢獨立變更
+        onSessionCostChange={(sessionId, cost) => {
           const updatedEvent = {
             ...event,
             sessions: event.sessions.map((s: any) => 
@@ -282,7 +297,6 @@ export const EventWorkspace: React.FC<Props> = ({
         onReorderSessions={(newSessions) => onUpdate({ ...event, sessions: newSessions })}
       />
       
-      {/* ★ 關鍵修正處 2：把參數順利接棒傳給 SummaryCard */}
       <SummaryCard 
         event={event} 
         phoneBook={phoneBook} 
@@ -293,7 +307,7 @@ export const EventWorkspace: React.FC<Props> = ({
         onReportPaid={onReportPaid}
       />
 
-       {showTeamGenerator && (
+      {showTeamGenerator && (
         <TeamGenerator 
           event={event} 
           onClose={() => setShowTeamGenerator(false)} 

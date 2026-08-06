@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Settings, List, Receipt, Save, Crown, Clock, UserPlus, Calendar as CalendarIcon, ShieldCheck, Lock, Unlock, Search, Database, Download, Upload, MapPin, X, Plus } from 'lucide-react';
+import { Settings, List, Receipt, Save, Crown, ShieldCheck, Lock, Unlock, Search, Database, Download, Upload, MapPin, X, Plus, Sparkles } from 'lucide-react';
 import { EventWorkspace } from './components/EventWorkspace';
 import { EventList } from './components/EventList';
 import { Ledger } from './components/Ledger';
+import { CarolMode } from './components/CarolMode'; // 引入 Carol 專屬核數組件
 import { ContactManager } from './components/ContactManager'; 
 import { supabase } from './supabaseClient'; 
-import { WeeklyHeatmap } from './components/WeeklyHeatmap'; 
 
 // 引入外部數據檔
 import { PLAYER_PHONE_BOOK } from './data/playerData';
@@ -23,21 +23,21 @@ export default function App() {
   const [store, setStore] = useState<GlobalState>({ 
     events: [],
     defaults: {
-      cost: 200, // 保留舊屬性以防向下相容
+      cost: 200, 
       playerNames: ['Carol', 'Kei', 'Owen', 'Tao', 'Candice', 'Humberto', 'Abby', 'Elson', 'Miki', 'Jacob', 'Vanessa', 'Eddie', 'Iman', 'Herman', 'Fifi', 'Ka Ieng', 'Jimmy', 'Kit', 'Celia', 'Winnie', 'Pang', 'On' , 'Ricky'],
       sessionNames: ['15:00 - 16:00', '16:00 - 17:00'],
       phoneBook: PLAYER_PHONE_BOOK,
-      venues: [{ id: 'v1', name: '望廈場地', price: 200 }] // ★ 預設新增望廈場地
+      venues: [{ id: 'v1', name: '望廈場地', price: 200 }]
     },
     paidStatus: {},
     reportedStatus: {} 
   });
   
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'events' | 'summary' | 'calendar' | 'hosts' | 'settings'>('events');
+  const [activeTab, setActiveTab] = useState<'events' | 'summary' | 'carol' | 'hosts' | 'settings'>('events');
   const [isLoaded, setIsLoaded] = useState(false);
   const [preventSave, setPreventSave] = useState(true); 
-  
+
   const [cloudContacts, setCloudContacts] = useState<Contact[]>([]);
   const USER_ID = 'Owen_User_001'; 
   const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
@@ -66,7 +66,6 @@ export default function App() {
     if (!error && data) setCloudContacts(data);
   };
 
-  // ★ 新增：每次切換分頁或進出活動時，自動捲動回最頂端
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [activeTab, currentEventId]);
@@ -81,7 +80,6 @@ export default function App() {
     }
   }, [isLoaded]);
 
-  // ★ 載入資料邏輯
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -102,7 +100,6 @@ export default function App() {
         if (finalData) {
           if (!finalData.defaults.phoneBook) finalData.defaults.phoneBook = PLAYER_PHONE_BOOK;
           if (!finalData.reportedStatus) finalData.reportedStatus = {}; 
-          // ★ 資料防呆：如果舊資料沒有 venues，自動幫忙加上
           if (!finalData.defaults.venues || finalData.defaults.venues.length === 0) {
             finalData.defaults.venues = [{ id: 'v1', name: '望廈場地', price: finalData.defaults.cost || 200 }];
           }
@@ -125,7 +122,6 @@ export default function App() {
     loadData();
   }, []);
 
-  // ★ 存檔邏輯
   useEffect(() => {
     const saveData = async () => {
       if (isLoaded && !preventSave && store.events.length > 0) {
@@ -178,24 +174,30 @@ export default function App() {
   };
 
   const handleTogglePaid = (key: string) => { 
-    setStore(prev => ({ ...prev, paidStatus: { ...prev.paidStatus, [key]: !prev.paidStatus[key] }, reportedStatus: { ...prev.reportedStatus, [key]: false } })); 
+    setStore(prev => ({ 
+      ...prev, 
+      paidStatus: { ...prev.paidStatus, [key]: !prev.paidStatus[key] }, 
+      reportedStatus: { ...prev.reportedStatus, [key]: false } 
+    })); 
   };
+
   const handleReportPaid = (key: string) => { 
-    setStore(prev => ({ ...prev, reportedStatus: { ...prev.reportedStatus, [key]: true } })); 
+    setStore(prev => ({ 
+      ...prev, 
+      reportedStatus: { ...prev.reportedStatus, [key]: true } 
+    })); 
   };
+
   const handleUpdateEvent = (updatedEvent: EventData) => { 
     setStore(prev => ({ ...prev, events: prev.events.map(e => e.id === updatedEvent.id ? updatedEvent : e) })); 
   };
 
-  // ★ 更新場地的方法
   const handleUpdateVenues = (newVenues: Venue[]) => {
     setStore(prev => ({ ...prev, defaults: { ...prev.defaults, venues: newVenues } }));
   };
 
-  // ★ 接龍解析引擎 (加入 venueId 支援)
   const handleCreateEvent = (data: { name: string, date: string, startTime: string, endTime: string, rawRoster: string, venueId?: string }) => {
     const newId = generateId();
-    // 尋找選擇的場地，如果沒選或找不到，預設用清單裡的第一個場地
     const selectedVenue = store.defaults.venues.find(v => v.id === data.venueId) || store.defaults.venues[0];
     const currentCost = selectedVenue.price;
 
@@ -203,7 +205,6 @@ export default function App() {
     const endHour = parseInt(data.endTime.split(':')[0], 10);
     const autoSessions = [];
     for (let i = startHour; i < endHour; i++) {
-      // 這裡直接套用選定場地的價格
       autoSessions.push({ id: generateId(), name: `${i.toString().padStart(2, '0')}:00 - ${(i + 1).toString().padStart(2, '0')}:00`, cost: currentCost, hostId: 'Carol' });
     }
     
@@ -227,7 +228,6 @@ export default function App() {
       });
     }
     
-    // 將 venueId 一併存入 EventData 中
     const newEvent: EventData = { id: newId, date: data.date, eventName: data.name, venueId: selectedVenue.id, defaultCost: currentCost, players: initialPlayers, sessions: autoSessions, participation: {} };
     setStore(prev => ({ ...prev, events: [newEvent, ...prev.events] }));
     setCurrentEventId(newId);
@@ -235,12 +235,11 @@ export default function App() {
 
   if (!isLoaded) return null;
 
-if (currentEventId) {
+  if (currentEventId) {
     const event = store.events.find(e => e.id === currentEventId);
     if (!event) return null;
     return (
       <div className="max-w-3xl mx-auto p-4">
-        {/* ★ 關鍵修正：補上缺失的 4 個帳單連動參數 */}
         <EventWorkspace 
           event={event} 
           onUpdate={handleUpdateEvent} 
@@ -252,12 +251,10 @@ if (currentEventId) {
           phoneBook={store.defaults.phoneBook} 
           cloudContacts={cloudContacts} 
           venues={store.defaults.venues}
-          // --- 以下是這次漏掉的連動參數 ---
           paidStatus={store.paidStatus}
           reportedStatus={store.reportedStatus}
           onTogglePaid={handleTogglePaid}
           onReportPaid={handleReportPaid}
-          // ----------------------------
         />
       </div>
     );
@@ -278,20 +275,43 @@ if (currentEventId) {
       </header>
 
       <main className="max-w-3xl mx-auto p-4">
-        {/* 將 venues 傳遞給 EventList 以便在新增活動時產生下拉選單 */}
-        {activeTab === 'events' && <div className="space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-500"><EventList events={store.events} onSelectEvent={setCurrentEventId} onCreateEvent={handleCreateEvent} venues={store.defaults.venues} /></div>}
-        {activeTab === 'calendar' && <div className="animate-in fade-in slide-in-from-bottom-4 duration-500"><WeeklyHeatmap events={store.events} /></div>}
+        {activeTab === 'events' && (
+          <div className="space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <EventList events={store.events} onSelectEvent={setCurrentEventId} onCreateEvent={handleCreateEvent} venues={store.defaults.venues} />
+          </div>
+        )}
         
+        {/* BILLING 頁面：球友自助查帳 */}
         {activeTab === 'summary' && (
-          <Ledger events={store.events} paidStatus={store.paidStatus} reportedStatus={store.reportedStatus} onTogglePaid={handleTogglePaid} onReportPaid={handleReportPaid} phoneBook={store.defaults.phoneBook} cloudContacts={cloudContacts} />
+          <Ledger 
+            events={store.events} 
+            paidStatus={store.paidStatus} 
+            reportedStatus={store.reportedStatus} 
+            onTogglePaid={handleTogglePaid} 
+            onReportPaid={handleReportPaid} 
+            phoneBook={store.defaults.phoneBook} 
+            cloudContacts={cloudContacts} 
+          />
+        )}
+
+        {/* CAROL 頁面：Carol 專屬核數管理模式 */}
+        {activeTab === 'carol' && (
+          <CarolMode 
+            events={store.events} 
+            paidStatus={store.paidStatus} 
+            reportedStatus={store.reportedStatus} 
+            onTogglePaid={handleTogglePaid} 
+            onReportPaid={handleReportPaid} 
+            phoneBook={store.defaults.phoneBook} 
+            cloudContacts={cloudContacts} 
+          />
         )}
         
         {activeTab === 'hosts' && <ContactManager contacts={cloudContacts} onRefresh={fetchCloudContacts} userId={USER_ID} />}
 
         {activeTab === 'settings' && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-             
-             {/* ★ 全新場地管理區塊 (取代舊的單一租金設定) */}
+             {/* 場地管理區塊 */}
              <section className="bg-white rounded-[2rem] border border-slate-200 p-5 shadow-sm">
                 <span className="font-black text-slate-700 text-sm flex items-center gap-2 mb-4">
                   <MapPin size={18} className="text-blue-500" /> 場地與每小時租金管理
@@ -401,11 +421,17 @@ if (currentEventId) {
         )}
       </main>
 
+      {/* 底部導覽列 */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-200 px-4 py-3 z-40 shadow-2xl">
-        <div className="max-w-3xl mx-auto flex justify-between items-center px-2">
+        <div className="max-w-3xl mx-auto flex justify-around items-center px-2">
           <button onClick={() => setActiveTab('events')} className={`flex flex-col items-center gap-1 w-16 ${activeTab === 'events' ? 'text-blue-700' : 'text-slate-400'}`}><List size={24} /><span className="text-[10px] font-black uppercase">Events</span></button>
           <button onClick={() => setActiveTab('summary')} className={`flex flex-col items-center gap-1 w-16 ${activeTab === 'summary' ? 'text-blue-700' : 'text-slate-400'}`}><Receipt size={24} /><span className="text-[10px] font-black uppercase">Billing</span></button>
-          <button onClick={() => setActiveTab('calendar')} className={`flex flex-col items-center gap-1 w-16 ${activeTab === 'calendar' ? 'text-blue-700' : 'text-slate-400'}`}><CalendarIcon size={24} /><span className="text-[10px] font-black uppercase">Calendar</span></button>
+          
+          <button onClick={() => setActiveTab('carol')} className={`flex flex-col items-center gap-1 w-16 ${activeTab === 'carol' ? 'text-blue-700' : 'text-slate-400'}`}>
+            <Sparkles size={24} />
+            <span className="text-[10px] font-black uppercase">Carol</span>
+          </button>
+
           <button onClick={() => setActiveTab('hosts')} className={`flex flex-col items-center gap-1 w-16 ${activeTab === 'hosts' ? 'text-blue-700' : 'text-slate-400'}`}><Crown size={24} /><span className="text-[10px] font-black uppercase">Host</span></button>
         </div>
       </nav>

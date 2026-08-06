@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { EventData } from '../types';
-import { Trash2, X, Crown, GripVertical, GripHorizontal } from 'lucide-react';
+import { Trash2, X, Crown, GripVertical, GripHorizontal, CheckSquare, Square } from 'lucide-react';
 
-// ★ 新增 Venue 介面定義
 interface Venue {
   id: string;
   name: string;
@@ -12,12 +11,13 @@ interface Venue {
 interface Props {
   event: EventData;
   cloudContacts: { id: string; name: string; phone: string }[];
-  venues: Venue[]; // ★ 新增：接收場地清單
+  venues: Venue[];
   onWeightChange: (sessionId: string, playerId: string, weight: number) => void;
+  onBatchWeightChange?: (updates: { [key: string]: number }) => void; // 🌟 新增：批次更新支援
   onRemoveSession: (sessionId: string) => void;
   onRemovePlayer: (playerId: string) => void;
   onHostChange: (sessionId: string, hostId: string) => void;
-  onSessionCostChange: (sessionId: string, cost: number) => void; // ★ 新增：單一時段價錢更新
+  onSessionCostChange: (sessionId: string, cost: number) => void;
   onReorderPlayers?: (newPlayers: any[]) => void;
   onReorderSessions?: (newSessions: any[]) => void;
 }
@@ -25,12 +25,13 @@ interface Props {
 export const MatrixGrid: React.FC<Props> = ({ 
   event, 
   cloudContacts, 
-  venues, // ★ 解構接收
+  venues, 
   onWeightChange, 
+  onBatchWeightChange,
   onRemoveSession, 
   onRemovePlayer, 
   onHostChange,
-  onSessionCostChange, // ★ 解構接收
+  onSessionCostChange, 
   onReorderPlayers,
   onReorderSessions
 }) => {
@@ -113,7 +114,7 @@ export const MatrixGrid: React.FC<Props> = ({
 
   const getWeight = (sessionId: string, playerId: string) => {
     const key = `${sessionId}_${playerId}`;
-    return event.participation?.[key] || 0;
+    return event.participation?.[key] ?? 0;
   };
 
   const getWeightStyle = (w: number, hasHost: boolean) => {
@@ -135,6 +136,46 @@ export const MatrixGrid: React.FC<Props> = ({
     else if (currentWeight === 1) nextWeight = 0.5;
     else nextWeight = 0;
     onWeightChange(sessionId, playerId, nextWeight);
+  };
+
+  // 檢查該時段是否所有人都是 1.0 (全到)
+  const isSessionAllSelected = (sessionId: string) => {
+    if (!event.players || event.players.length === 0) return false;
+    return event.players.every(player => getWeight(sessionId, player.id) === 1);
+  };
+
+  // 🌟 修復後的一鍵全選 / 全清空邏輯
+  const handleToggleSessionAll = (sessionId: string) => {
+    const session = event.sessions.find(s => s.id === sessionId);
+    if (!session?.hostId) {
+      alert(`請先為場次「${session?.name || ''}」選擇代付人 (Host) 再進行全選喔！`);
+      return;
+    }
+
+    if (!event.players || event.players.length === 0) {
+      alert('請先新增球員再進行全選！');
+      return;
+    }
+
+    const allAreOne = isSessionAllSelected(sessionId);
+    const targetWeight = allAreOne ? 0 : 1;
+
+    // 彙整該時段所有球員的更新資料
+    const updates: { [key: string]: number } = {};
+    event.players.forEach(player => {
+      const key = `${sessionId}_${player.id}`;
+      updates[key] = targetWeight;
+    });
+
+    // 若父組件有傳入批次更新函式則優先採用，否則逐一呼叫
+    if (onBatchWeightChange) {
+      onBatchWeightChange(updates);
+    } else {
+      Object.entries(updates).forEach(([key, weight]) => {
+        const [sId, pId] = key.split('_');
+        onWeightChange(sId, pId, weight);
+      });
+    }
   };
 
   if (!event || !event.sessions || !event.players) {
@@ -160,73 +201,91 @@ export const MatrixGrid: React.FC<Props> = ({
                 Player
               </th>
               
-              {event.sessions.map((session, index) => (
-                <th 
-                  key={session.id} 
-                  data-session-index={index}
-                  className={`px-4 py-4 min-w-[130px] text-center font-black text-blue-900 border-b border-blue-100 group relative transition-all ${dragInfo?.type === 'session' && dragInfo.index === index ? 'opacity-60 bg-blue-100 shadow-inner' : ''}`}
-                >
-                  <div className="flex flex-col items-center gap-1">
-                    <div 
-                      className="touch-none p-3 -mt-2 cursor-grab active:cursor-grabbing text-blue-300 hover:text-blue-600"
-                      onPointerDown={(e) => {
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                        setDragInfo({ type: 'session', index });
-                      }}
-                    >
-                      <GripHorizontal size={18} />
-                    </div>
-
-                    <span className="text-[10px] text-blue-400 uppercase tracking-tighter">Time</span>
-                    <span className="text-xs whitespace-nowrap">{session.name}</span>
-                    
-                    {/* ★ 核心修改：將純文字價錢替換為下拉選單 */}
-                    <select 
-                      value={session.cost}
-                      onChange={(e) => onSessionCostChange(session.id, Number(e.target.value))}
-                      className="mt-0.5 w-[90%] text-[10px] font-black text-blue-600 bg-white border border-blue-200 rounded-lg py-1 px-1 outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer shadow-sm text-center"
-                    >
-                      {venues && venues.map(v => (
-                        <option key={v.id} value={v.price}>{v.name} (${v.price}/hr)</option>
-                      ))}
-                    </select>
-                    
-                    <div className="mt-2 w-full px-1">
-                      <div className="flex items-center justify-center gap-1 mb-1">
-                        <Crown size={10} className={session.hostId ? "text-yellow-500" : "text-blue-200"} />
-                        <span className="text-[9px] text-blue-400 uppercase">Paid By</span>
-                      </div>
-                      
-                      <select 
-                        value={session.hostId || ''}
-                        onChange={(e) => onHostChange(session.id, e.target.value)}
-                        className={`w-full text-[10px] bg-white border ${!session.hostId ? 'border-red-200 animate-pulse' : 'border-blue-100'} rounded-lg py-1 px-1 outline-none focus:ring-1 focus:ring-blue-400 font-bold text-blue-700 cursor-pointer`}
+              {event.sessions.map((session, index) => {
+                const allSelected = isSessionAllSelected(session.id);
+                return (
+                  <th 
+                    key={session.id} 
+                    data-session-index={index}
+                    className={`px-4 py-4 min-w-[130px] text-center font-black text-blue-900 border-b border-blue-100 group relative transition-all ${dragInfo?.type === 'session' && dragInfo.index === index ? 'opacity-60 bg-blue-100 shadow-inner' : ''}`}
+                  >
+                    <div className="flex flex-col items-center gap-1">
+                      <div 
+                        className="touch-none p-3 -mt-2 cursor-grab active:cursor-grabbing text-blue-300 hover:text-blue-600"
+                        onPointerDown={(e) => {
+                          e.currentTarget.setPointerCapture(e.pointerId);
+                          setDragInfo({ type: 'session', index });
+                        }}
                       >
-                        <option value="">選擇代付人</option>
-                        {cloudContacts.length > 0 && (
-                          <optgroup label="🌟 雲端聯絡簿">
-                            {cloudContacts.map(c => (
-                              <option key={c.id} value={c.name}>{c.name}</option>
+                        <GripHorizontal size={18} />
+                      </div>
+
+                      <span className="text-[10px] text-blue-400 uppercase tracking-tighter">Time</span>
+                      <span className="text-xs whitespace-nowrap">{session.name}</span>
+                      
+                      {/* 一鍵全選按鈕 */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSessionAll(session.id)}
+                        className={`mt-1 px-2.5 py-1 text-[10px] font-bold rounded-lg border flex items-center gap-1 transition-all active:scale-95 ${
+                          allSelected 
+                            ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm' 
+                            : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50'
+                        }`}
+                        title={allSelected ? "點擊取消全選" : "一鍵全選該時段"}
+                      >
+                        {allSelected ? <CheckSquare size={12} /> : <Square size={12} />}
+                        {allSelected ? '已全選' : '全選'}
+                      </button>
+
+                      {/* 價錢下拉選單 */}
+                      <select 
+                        value={session.cost}
+                        onChange={(e) => onSessionCostChange(session.id, Number(e.target.value))}
+                        className="mt-1 w-[90%] text-[10px] font-black text-blue-600 bg-white border border-blue-200 rounded-lg py-1 px-1 outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer shadow-sm text-center"
+                      >
+                        {venues && venues.map(v => (
+                          <option key={v.id} value={v.price}>{v.name} (${v.price}/hr)</option>
+                        ))}
+                      </select>
+                      
+                      <div className="mt-2 w-full px-1">
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <Crown size={10} className={session.hostId ? "text-yellow-500" : "text-blue-200"} />
+                          <span className="text-[9px] text-blue-400 uppercase">Paid By</span>
+                        </div>
+                        
+                        <select 
+                          value={session.hostId || ''}
+                          onChange={(e) => onHostChange(session.id, e.target.value)}
+                          className={`w-full text-[10px] bg-white border ${!session.hostId ? 'border-red-200 animate-pulse' : 'border-blue-100'} rounded-lg py-1 px-1 outline-none focus:ring-1 focus:ring-blue-400 font-bold text-blue-700 cursor-pointer`}
+                        >
+                          <option value="">選擇代付人</option>
+                          {cloudContacts.length > 0 && (
+                            <optgroup label="🌟 雲端聯絡簿">
+                              {cloudContacts.map(c => (
+                                <option key={c.id} value={c.name}>{c.name}</option>
+                              ))}
+                            </optgroup>
+                          )}
+                          <optgroup label="🏐 今日玩家">
+                            {uniqueTodayPlayers.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
                             ))}
                           </optgroup>
-                        )}
-                        <optgroup label="🏐 今日玩家">
-                          {uniqueTodayPlayers.map(p => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </optgroup>
-                      </select>
-                    </div>
+                        </select>
+                      </div>
 
-                    <button 
-                      onClick={() => onRemoveSession(session.id)}
-                      className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 bg-red-50 text-red-400 p-1 rounded-full transition-all"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                </th>
-              ))}
+                      <button 
+                        onClick={() => onRemoveSession(session.id)}
+                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 bg-red-50 text-red-400 p-1 rounded-full transition-all"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
