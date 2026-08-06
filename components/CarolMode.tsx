@@ -10,9 +10,7 @@ import {
   Check,
   Clock,
   MinusCircle,
-  PlusCircle,
-  CheckSquare,
-  Square
+  PlusCircle
 } from 'lucide-react';
 
 interface Player { id: string; name: string; }
@@ -48,7 +46,7 @@ export const CarolMode: React.FC<CarolModeProps> = ({
   onReportPaid,
   cloudContacts = []
 }) => {
-  // 1. 預設全部折疊收合 (預設不展開任何活動)
+  // 預設全部折疊收合
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -64,7 +62,7 @@ export const CarolMode: React.FC<CarolModeProps> = ({
 
   // 切換活動結清狀態
   const toggleSettledEvent = (eventId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // 防止觸發展開/折疊
+    e.stopPropagation();
     setSettledEventIds(prev => {
       const next = new Set(prev);
       if (next.has(eventId)) {
@@ -85,9 +83,9 @@ export const CarolMode: React.FC<CarolModeProps> = ({
   const sortedEvents = [...events].sort((a, b) => {
     const isSettledA = settledEventIds.has(a.id);
     const isSettledB = settledEventIds.has(b.id);
-    if (isSettledA && !isSettledB) return 1;  // A 已結清 -> 往後排 (置底)
-    if (!isSettledA && isSettledB) return -1; // B 已結清 -> A 在前
-    return 0; // 保留原本日期順序
+    if (isSettledA && !isSettledB) return 1;  
+    if (!isSettledA && isSettledB) return -1; 
+    return 0; 
   });
 
   // 查找 ContactManager 中的 Contact 資料
@@ -251,7 +249,6 @@ export const CarolMode: React.FC<CarolModeProps> = ({
           }
         });
 
-        const carolNetTarget = totalReceivable - totalCarolPayoutToHosts;
         const isExpanded = expandedEventId === event.id;
 
         return (
@@ -272,7 +269,7 @@ export const CarolMode: React.FC<CarolModeProps> = ({
             >
               <div className="flex items-center gap-3.5">
                 
-                {/* 核心改動：Checkbox 樣式按鈕 */}
+                {/* Checkbox 樣式按鈕 */}
                 <button
                   onClick={(e) => toggleSettledEvent(event.id, e)}
                   title={isSettled ? "點擊取消結清" : "點擊標記為已結清並置底"}
@@ -306,9 +303,9 @@ export const CarolMode: React.FC<CarolModeProps> = ({
 
               <div className="flex items-center gap-4">
                 <div className="text-right">
-                  <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase block">全場向球員總應收</span>
+                  <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase block">全場總應收</span>
                   <span className={`font-extrabold text-lg ${isSettled ? 'text-slate-400' : 'text-indigo-600'}`}>
-                    ${Math.round(totalReceivable)}
+                    ${totalReceivable.toFixed(1)}
                   </span>
                 </div>
                 <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
@@ -321,7 +318,7 @@ export const CarolMode: React.FC<CarolModeProps> = ({
             {isExpanded && (
               <div className="p-5 border-t border-slate-100 bg-slate-50/40 space-y-5">
                 
-                {/* Carol 本人統計看板 */}
+                {/* 看板：顯示應轉發給 Host 總額 (精確到小數點後一個位) */}
                 <div className={`relative overflow-hidden p-5 rounded-2xl shadow-xl transition-all space-y-4 ${
                   isSettled
                     ? 'bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 text-slate-200'
@@ -343,9 +340,9 @@ export const CarolMode: React.FC<CarolModeProps> = ({
                     </div>
 
                     <div className="text-right">
-                      <span className="text-[11px] font-semibold text-indigo-200/80 block tracking-wide">Carol 最終淨收目標</span>
+                      <span className="text-[11px] font-semibold text-indigo-200/80 block tracking-wide">應轉發給 Host 總額</span>
                       <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-100 to-indigo-200">
-                        ${Math.round(carolNetTarget)}
+                        ${totalCarolPayoutToHosts.toFixed(1)}
                       </span>
                     </div>
                   </div>
@@ -353,16 +350,16 @@ export const CarolMode: React.FC<CarolModeProps> = ({
                   <div className="relative grid grid-cols-2 gap-3 pt-3 border-t border-white/10 text-xs">
                     <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-2.5 flex items-center justify-between">
                       <span className="text-indigo-200/70 font-medium flex items-center gap-1">
-                        <PlusCircle size={13} className="text-indigo-300" /> 代付場費
+                        <PlusCircle size={13} className="text-indigo-300" /> 球員總應收
                       </span>
-                      <span className="font-bold text-white">${Math.round(carolHostInfo.paidVenueCost)}</span>
+                      <span className="font-bold text-white">${totalReceivable.toFixed(1)}</span>
                     </div>
 
                     <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-2.5 flex items-center justify-between">
                       <span className="text-indigo-200/70 font-medium flex items-center gap-1">
-                        <MinusCircle size={13} className="text-rose-300" /> 應扣個人球費
+                        <MinusCircle size={13} className="text-rose-300" /> Carol 個人球費
                       </span>
-                      <span className="font-bold text-rose-200">${Math.round(carolPersonalCost)}</span>
+                      <span className="font-bold text-rose-200">${carolPersonalCost.toFixed(1)}</span>
                     </div>
                   </div>
                 </div>
@@ -430,7 +427,7 @@ export const CarolMode: React.FC<CarolModeProps> = ({
                                 CAROL 應轉發給 {info.displayName}
                               </span>
                               <span className="font-black text-xl text-amber-600 tracking-tight">
-                                ${Math.round(netTransfer)}
+                                ${netTransfer.toFixed(1)}
                               </span>
                             </div>
                           </div>
@@ -454,13 +451,13 @@ export const CarolMode: React.FC<CarolModeProps> = ({
                           <div className="flex items-center justify-between pt-1">
                             <div className="flex items-center gap-1.5 text-xs font-semibold">
                               <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
-                                代場費 ${Math.round(info.paidVenueCost)}
+                                代場費 ${info.paidVenueCost.toFixed(1)}
                               </span>
                               <span className="text-slate-300">-</span>
                               <span className={`px-2 py-0.5 rounded-md ${
                                 info.personalCost > 0 ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-400'
                               }`}>
-                                球費 ${Math.round(info.personalCost)}
+                                球費 ${info.personalCost.toFixed(1)}
                               </span>
                             </div>
 
