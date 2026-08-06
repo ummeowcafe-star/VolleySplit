@@ -306,7 +306,7 @@ export const CarolMode: React.FC<CarolModeProps> = ({
 
               <div className="flex items-center gap-4">
                 <div className="text-right">
-                  <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase block">全場向球員總應收 (不含CAROL)</span>
+                  <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase block">全場向球員總應收</span>
                   <span className={`font-extrabold text-lg ${isSettled ? 'text-slate-400' : 'text-indigo-600'}`}>
                     ${Math.round(totalReceivable)}
                   </span>
