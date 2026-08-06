@@ -9,9 +9,7 @@ import {
   Phone, 
   Copy, 
   Check,
-  User,
   Clock,
-  ArrowRight,
   MinusCircle,
   PlusCircle
 } from 'lucide-react';
@@ -127,13 +125,12 @@ export const CarolMode: React.FC<CarolModeProps> = ({
     setCopiedKey(hostKey);
     setTimeout(() => setCopiedKey(null), 2000);
 
-    // 若尚未付款且尚未報價，複製後自動標記為待確認
     if (!paidStatus[hostKey] && !reportedStatus[hostKey]) {
       onReportPaid(hostKey);
     }
   };
 
-  // 6. 處理 Host 轉帳 Check List 狀態切換 (未處理 -> 待確認 -> 已轉發 -> 未處理)
+  // 6. 處理 Host 轉帳 Check List 狀態切換
   const handleHostStatusClick = (hostKey: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const isPaid = paidStatus[hostKey];
@@ -261,7 +258,6 @@ export const CarolMode: React.FC<CarolModeProps> = ({
                 
                 {/* Carol 本人統計看板 (藍紫漸變微光) */}
                 <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-900 text-white p-5 rounded-2xl shadow-xl shadow-indigo-950/20 space-y-4">
-                  {/* 背景微光飾點 */}
                   <div className="absolute -right-8 -top-8 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none" />
                   <div className="absolute right-12 -bottom-10 w-24 h-24 bg-blue-500/20 rounded-full blur-xl pointer-events-none" />
 
@@ -285,7 +281,6 @@ export const CarolMode: React.FC<CarolModeProps> = ({
                     </div>
                   </div>
 
-                  {/* Carol 的個人場費與球費卡片 */}
                   <div className="relative grid grid-cols-2 gap-3 pt-3 border-t border-white/10 text-xs">
                     <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-2.5 flex items-center justify-between">
                       <span className="text-indigo-200/70 font-medium flex items-center gap-1">
@@ -325,28 +320,21 @@ export const CarolMode: React.FC<CarolModeProps> = ({
                           key={hostName} 
                           className="bg-white p-4 rounded-2xl border border-slate-200/70 shadow-sm hover:shadow-md transition-all duration-200 space-y-3"
                         >
-                          {/* 第一層：Host 資訊與 Carol 應轉金額 */}
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2.5">
-                              {/* 名字大頭貼 Badge */}
-                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-100 to-slate-100 text-indigo-700 font-black text-xs flex items-center justify-center border border-indigo-200/50">
+                          {/* 第一列：頭像 + 名字 + 電話膠囊 & 右側金額 */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-100 to-slate-100 text-indigo-700 font-black text-xs flex items-center justify-center border border-indigo-200/50 shrink-0">
                                 {info.displayName.substring(0, 2).toUpperCase()}
                               </div>
-                              
-                              <div>
-                                <span className="font-bold text-slate-800 text-base block leading-tight">{info.displayName}</span>
-                                {info.sessions.length > 0 && (
-                                  <span className="text-[10px] font-semibold text-slate-400 flex items-center gap-1 mt-0.5">
-                                    <Clock size={10} /> {info.sessions.join('、')}
-                                  </span>
-                                )}
-                              </div>
 
-                              {/* 一鍵複製電話膠囊按鈕 */}
+                              <span className="font-bold text-slate-800 text-base leading-tight shrink-0">
+                                {info.displayName}
+                              </span>
+
                               {info.phone ? (
                                 <button
                                   onClick={(e) => handleCopyPhone(hostKey, info.phone, e)}
-                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold transition-all ml-1 ${
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-mono font-bold transition-all ${
                                     copiedKey === hostKey
                                       ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
                                       : 'bg-slate-100/80 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 border border-slate-200/60 active:scale-95'
@@ -368,10 +356,9 @@ export const CarolMode: React.FC<CarolModeProps> = ({
                               )}
                             </div>
 
-                            {/* Carol 應轉發金額 */}
-                            <div className="text-right">
-                              <span className="text-[10px] font-bold text-amber-600/90 uppercase block">
-                                Carol 應轉發給 {info.displayName}
+                            <div className="text-right shrink-0">
+                              <span className="text-[10px] font-bold text-amber-600/90 uppercase block leading-tight">
+                                CAROL 應轉發給 {info.displayName}
                               </span>
                               <span className="font-black text-xl text-amber-600 tracking-tight">
                                 ${Math.round(netTransfer)}
@@ -379,9 +366,23 @@ export const CarolMode: React.FC<CarolModeProps> = ({
                             </div>
                           </div>
 
-                          {/* 第二層：明細算式與 Checklist 狀態控制鈕 */}
-                          <div className="flex items-center justify-between pt-2.5 border-t border-slate-100">
-                            {/* 算式標籤 */}
+                          {/* 第二列：獨立時段專屬行 (獨立一行呈列) */}
+                          {info.sessions.length > 0 && (
+                            <div className="flex items-center gap-1.5 text-xs bg-slate-50/80 px-2.5 py-1.5 rounded-xl border border-slate-100/80">
+                              <Clock size={12} className="text-slate-400 shrink-0" />
+                              <span className="font-bold text-[11px] text-slate-400 shrink-0">代付時段：</span>
+                              <div className="flex flex-wrap gap-1 font-mono text-[11px] font-semibold text-slate-600">
+                                {info.sessions.map((sessionText, sIdx) => (
+                                  <span key={sIdx} className="bg-white px-2 py-0.5 rounded-md border border-slate-200/70 shadow-2xs">
+                                    {sessionText}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 第三列：算式標籤與 Checklist 狀態按鈕 */}
+                          <div className="flex items-center justify-between pt-1">
                             <div className="flex items-center gap-1.5 text-xs font-semibold">
                               <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
                                 代場費 ${Math.round(info.paidVenueCost)}
@@ -394,7 +395,6 @@ export const CarolMode: React.FC<CarolModeProps> = ({
                               </span>
                             </div>
 
-                            {/* Checklist 狀態按鈕 */}
                             <button
                               onClick={(e) => handleHostStatusClick(hostKey, e)}
                               className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 active:scale-95 ${
