@@ -65,24 +65,49 @@ export const Ledger: React.FC<Props> = ({
     }, 10000);
   };
 
+  // ==========================================
+  // 統一收款 + 舊資料兼容模式
+  //
+  // 規則：
+  // 1. 新增／尚未有任何付款狀態的帳單：全部改為支付給 Carol。
+  // 2. 舊資料中已「回報已轉帳」或已「核實付款」的交易：保留原收款人及原 uniqueKey，
+  //    避免更新程式後歷史紀錄突然變成未付款。
+  // 3. 舊資料中仍未處理的交易：重新合併為「支付給 Carol」。
+  //
+  // 這樣不需要改動 localStorage / database 內既有 paidStatus、reportedStatus 資料。
+  // ==========================================
   const eventDebts = useMemo(() => {
     const debtsByEvent: { [eventId: string]: any[] } = {};
+
     events.forEach(event => {
       if (!event.sessions || !event.players) return;
+
+      // ---------- Step 1：先完整重建舊版結算結果 ----------
+      // 必須保持與舊版算法及 uniqueKey 完全一致，才能辨認既有付款紀錄。
       const balances: { [playerId: string]: number } = {};
       event.players.forEach(p => { balances[p.id] = 0; });
+
       event.sessions.forEach(session => {
         if (session.hostId) {
           let targetId = session.hostId;
-          const playerByName = event.players.find(p => p.name === session.hostId || p.id === session.hostId);
+          const playerByName = event.players.find(
+            p => p.name === session.hostId || p.id === session.hostId
+          );
           if (playerByName) targetId = playerByName.id;
           if (balances[targetId] === undefined) balances[targetId] = 0;
           balances[targetId] += session.cost;
         }
       });
+
       event.sessions.forEach(session => {
-        const participants = event.players.filter(p => (event.participation?.[`${session.id}_${p.id}`] || 0) > 0);
-        const totalWeight = participants.reduce((sum, p) => sum + (event.participation?.[`${session.id}_${p.id}`] || 0), 0);
+        const participants = event.players.filter(
+          p => (event.participation?.[`${session.id}_${p.id}`] || 0) > 0
+        );
+        const totalWeight = participants.reduce(
+          (sum, p) => sum + (event.participation?.[`${session.id}_${p.id}`] || 0),
+          0
+        );
+
         if (totalWeight > 0) {
           const unitCost = session.cost / totalWeight;
           participants.forEach(p => {
@@ -91,35 +116,108 @@ export const Ledger: React.FC<Props> = ({
           });
         }
       });
+
       const debtors: { id: string; amount: number }[] = [];
       const creditors: { id: string; amount: number }[] = [];
+
       Object.entries(balances).forEach(([id, balance]) => {
         if (balance < -0.1) debtors.push({ id, amount: Math.abs(balance) });
         else if (balance > 0.1) creditors.push({ id, amount: balance });
       });
+
       debtors.sort((a, b) => b.amount - a.amount);
       creditors.sort((a, b) => b.amount - a.amount);
+
       const tempDebtors = JSON.parse(JSON.stringify(debtors));
       const tempCreditors = JSON.parse(JSON.stringify(creditors));
       let dIdx = 0, cIdx = 0;
-      const transactions = [];
+      const legacyTransactions: any[] = [];
+
       while (dIdx < tempDebtors.length && cIdx < tempCreditors.length) {
-        const d = tempDebtors[dIdx], c = tempCreditors[cIdx];
+        const d = tempDebtors[dIdx];
+        const c = tempCreditors[cIdx];
         const settleAmount = Math.min(d.amount, c.amount);
         const fromPlayer = event.players.find(p => p.id === d.id);
         const toPlayer = event.players.find(p => p.id === c.id);
-        transactions.push({
-          eventId: event.id, eventName: event.eventName, eventDate: event.date,
-          fromId: d.id, toId: c.id, fromName: fromPlayer ? fromPlayer.name : d.id, toName: toPlayer ? toPlayer.name : c.id,
-          amount: settleAmount, uniqueKey: `${event.id}_${d.id}_${c.id}`
+
+        legacyTransactions.push({
+          eventId: event.id,
+          eventName: event.eventName,
+          eventDate: event.date,
+          fromId: d.id,
+          toId: c.id,
+          fromName: fromPlayer ? fromPlayer.name : d.id,
+          toName: toPlayer ? toPlayer.name : c.id,
+          amount: settleAmount,
+          uniqueKey: `${event.id}_${d.id}_${c.id}`,
+          isLegacyLocked: false
         });
-        d.amount -= settleAmount; c.amount -= settleAmount;
-        if (d.amount < 0.1) dIdx++; if (c.amount < 0.1) cIdx++;
+
+        d.amount -= settleAmount;
+        c.amount -= settleAmount;
+        if (d.amount < 0.1) dIdx++;
+        if (c.amount < 0.1) cIdx++;
       }
-      debtsByEvent[event.id] = transactions;
+
+      // ---------- Step 2：找中央收款人 Carol ----------
+      const collector = event.players.find(
+        p => p.name.trim().toLowerCase() === 'carol'
+      );
+
+      // 找不到 Carol 時，為避免帳單消失，直接沿用舊版結算。
+      if (!collector) {
+        debtsByEvent[event.id] = legacyTransactions;
+        return;
+      }
+
+      // ---------- Step 3：保留已有狀態的舊交易 ----------
+      // paid / reported 都視為「已經開始按舊流程處理」，不可突然更改收款人。
+      const lockedLegacyTransactions = legacyTransactions
+        .filter(t => paidStatus[t.uniqueKey] || reportedStatus[t.uniqueKey])
+        .map(t => ({ ...t, isLegacyLocked: true }));
+
+      // ---------- Step 4：其餘尚未處理的舊交易，改為統一支付 Carol ----------
+      // 按付款人合併，避免同一個人需要看到多筆「支付 Carol」。
+      const unlockedLegacyTransactions = legacyTransactions.filter(
+        t => !paidStatus[t.uniqueKey] && !reportedStatus[t.uniqueKey]
+      );
+
+      const amountByDebtor: Record<string, number> = {};
+      unlockedLegacyTransactions.forEach(t => {
+        // Carol 自己不需要支付給自己。
+        if (t.fromId === collector.id) return;
+        amountByDebtor[t.fromId] = (amountByDebtor[t.fromId] || 0) + t.amount;
+      });
+
+      const centralizedTransactions = Object.entries(amountByDebtor)
+        .filter(([, amount]) => amount > 0.1)
+        .map(([fromId, amount]) => {
+          const fromPlayer = event.players.find(p => p.id === fromId);
+          return {
+            eventId: event.id,
+            eventName: event.eventName,
+            eventDate: event.date,
+            fromId,
+            toId: collector.id,
+            fromName: fromPlayer ? fromPlayer.name : fromId,
+            toName: collector.name,
+            amount,
+            // 新 key 與舊版 key 分開，避免與歷史 creditor 狀態互相污染。
+            uniqueKey: `${event.id}_${fromId}_collector_${collector.id}`,
+            isLegacyLocked: false
+          };
+        });
+
+      // 已處理的歷史交易 + 尚未處理的新中央收款交易同時存在。
+      // 已付款舊交易在 UI 中仍會保持「已結清」；未付款部分則統一轉給 Carol。
+      debtsByEvent[event.id] = [
+        ...lockedLegacyTransactions,
+        ...centralizedTransactions
+      ];
     });
+
     return debtsByEvent;
-  }, [events]);
+  }, [events, paidStatus, reportedStatus]);
 
   const allUnpaidDebts = useMemo(() => {
     const flat = Object.values(eventDebts).flat();
